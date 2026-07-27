@@ -1,285 +1,585 @@
-"use client";
+import { getEssayReadingTime } from "./texty/data";
+import AgeGate from "./components/AgeGate";
+import SiteHeader from "./components/SiteHeader";
+import ZoomableImage from "./components/ZoomableImage";
+import ProjectForm from "./components/ProjectForm";
+import siteContent from "./content/site-content.json";
+import { localizeDeep, normalizeLocale, t, withLocale } from "./i18n";
+import { getLocalizedEssays } from "./texty/localized";
 
-import { useEffect, useState } from "react";
-import { essays } from "./texty/data";
-
-const steps = [
-  { n: "01", title: "Setkání", text: "Bez kamery, bez závazku. Vzájemné poznání, očekávání a důvod, proč do portrétu vstoupit." },
-  { n: "02", title: "Návrh", text: "Společně skládáme obraz, hlas, místo, dotek, anonymitu a míru spoluautorství." },
-  { n: "03", title: "Natáčení", text: "Citlivý rámec, improvizace, průběžná domluva a možnost kdykoli zastavit." },
-  { n: "04", title: "Střih", text: "Společné rozhodnutí o výsledku a o každém konkrétním použití." },
+const decisionImages = [
+  "/gallery/drevo-telo.webp",
+  "/gallery/umlcena-tvar.webp",
+  "/gallery/sklenene-oko.webp",
+  "/gallery/levitujici-list.webp",
+  "/gallery/cerveny-signal-optimized.webp",
+  "/gallery/zimni-les.webp",
 ];
 
-const spectrum = [
-  { label: "Přítomnost", sub: "dech · blízkost · ticho", text: "Dvě těla mohou jen ležet vedle sebe a dýchat. Intimita nemusí začínat nahotou ani sexem." },
-  { label: "Péče", sub: "hlazení · vlasy · masáž", text: "Dlaň na zádech, česání vlasů, teplo dechu nebo opora. Kamera sleduje drobné fyzické reakce." },
-  { label: "Otevřenost", sub: "nahota · váha · intimní dotek", text: "Otevřenější poloha je možnost, ne povinná eskalace. Rozsah vzniká jedině ze společné dohody." },
-  { label: "Za hranou zvyku", sub: "slast · vzrušení · vyvrcholení", text: "I explicitnější zkušenost může zůstat součástí konkrétního člověka, jeho hlasu a svobodného rozhodnutí." },
-];
-
-const safety = [
-  ["Před kamerou", "Konkrétně a bez eufemismů pojmenujeme obraz, dotek, nahotu, anonymitu, zvuk i zamýšlené použití. Stejně důležité je říct, co v portrétu nebude."],
-  ["Na místě", "Počet lidí a podoba uzavřeného prostoru se řídí potřebami účastníků. Kdo chce, přivede si důvěryhodnou osobu. Pracuje se střízlivě a s domluveným stop slovem či gestem."],
-  ["Při novém nápadu", "Improvizace je vítaná, ale neprobíhá potichu. Zastavíme obraz, návrh vyslovíme a každý dostane čas rozhodnout se bez tlaku."],
-  ["Před uvedením", "Účastníci vidí pracovní i finální střih. Samostatně schvalují konkrétní verzi i okruh použití: portfolio, web, sociální síť, projekci, výstavu nebo festival."],
-];
-
-const atlas = [
-  { title: "Carolee Schneemann · Fuses", year: "1964–1967", img: "/media/hkimg-013.jpg", text: "Tělo není hladký objekt; stává se materiálem filmu, časem i strukturou.", url: "https://www.eai.org/titles/fuses" },
-  { title: "Barbara Hammer · Dyketactics", year: "1974", img: "/media/hkimg-014.jpg", text: "Montáž těl, přírody a queer blízkosti skládá dotykovou paměť barev a povrchu.", url: "https://www.eai.org/titles/dyketactics" },
-  { title: "Pipilotti Rist · Pickelporno", year: "1992", img: "/media/hkimg-015.jpg", text: "Extrémní detaily těla se prolínají s přírodou a psychedelickou barvou.", url: "https://www.sammlung-goetz.de/en/exhibitions/pipilotti-rist/" },
-  { title: "Barbara Hammer · Sync Touch", year: "1981", img: "/media/hkimg-016.jpg", text: "Neukazovat hmat, ale nechat obraz hmatově myslet.", url: "https://www.eai.org/titles/sync-touch" },
-  { title: "Clio Barnard · The Arbor", year: "2010", img: "/media/hkimg-017.jpg", text: "Autentický hlas zůstává, zatímco tvář patří někomu jinému.", url: "https://www.bfi.org.uk/film/255658f7-981a-55e9-a075-67e559a26191/the-arbor" },
-  { title: "Marina Abramović · Rhythm 0", year: "1974", img: "/media/hkimg-020.jpg", text: "Důležitý kontrast: účastník nesmí přestat být jednajícím spoluautorem.", url: "https://www.moma.org/audio/playlist/243/3118" },
-];
-
-const sourceKinds = ["vše", "dotek", "společnost", "film", "bezpečí"];
-
-const visualEssay = [
-  { src: "/gallery/puda-mravenci.png", alt: "Mravenci na půdě obklopují organický útvar", label: "PŮDA / SPOLEČENSTVÍ" },
-  { src: "/gallery/lebka-karty.png", alt: "Stylizovaná lebka v košili obklopená hracími kartami", label: "ROLE / SMRTELNOST" },
-  { src: "/gallery/drevo-telo.webp", alt: "Detail dřeva připomínajícího lidské tělo", label: "POVRCH / TĚLO" },
-  { src: "/gallery/organicky-povrch.webp", alt: "Mokrý organický povrch v extrémním detailu", label: "DOTYK / HMOTA" },
-  { src: "/gallery/sklenene-oko-extreme.png", alt: "Kruhový abstraktní pohled skrze sklo", label: "POHLED / LOM" },
-  { src: "/gallery/temny-lustr-extreme.png", alt: "Temný lustr překrytý organickou strukturou", label: "PAMĚŤ / INTERIÉR" },
-  { src: "/gallery/zimni-les.webp", alt: "Zimní les proti nízkému slunci", label: "CHLAD / REAKCE" },
-  { src: "/gallery/jablka-snih.webp", alt: "Dvě žlutá jablka na zasněžených větvích", label: "KŘEHKOST / VÝDRŽ" },
-  { src: "/gallery/cerveny-signal.png", alt: "Rozpadlý červený digitální obraz", label: "SIGNÁL / SELHÁNÍ" },
-  { src: "/gallery/kresba-vrstvy.webp", alt: "Kreslená tvář postupně překrývaná další vrstvou", label: "AUTOPORTRÉT / MAZÁNÍ" },
-  { src: "/gallery/zelena-lebka.png", alt: "Zeleně nasvícená lebka se špendlíky", label: "SMYSL / PŘETÍŽENÍ" },
-  { src: "/gallery/hreben-makro.png", alt: "Extrémní makro pravidelných kovových zubů", label: "ŘÁD / TŘENÍ" },
-];
-
-const sources = [
+const researchLinks = [
   {
-    kind: "dotek",
-    type: "studie · open access",
     title: "Social touch deprivation during COVID-19",
-    author: "Mariana von Mohr a kol. · Royal Society Open Science · 2021",
-    text: "Výzkum vztahu mezi nedostatkem chtěného sociálního doteku, psychickou pohodou a touhou po mezilidském kontaktu.",
+    meta: "Royal Society Open Science · 2021",
     url: "https://royalsocietypublishing.org/rsos/article/8/9/210287/96157/Social-touch-deprivation-during-COVID-19-effects",
+    takeaway: "Nedostatek chtěného intimního doteku souvisel v pandemickém období s osamělostí a úzkostí. Souvislost není příkazem dotýkat se kohokoli.",
   },
   {
-    kind: "dotek",
-    type: "systematický přehled · meta-analýza",
-    title: "A systematic review and multivariate meta-analysis of the physical and mental health benefits of touch interventions",
-    author: "Packheiser a kol. · Nature Human Behaviour · 2024",
-    text: "Souhrn 137 studií zkoumajících, kdy a za jakých podmínek dotekové intervence souvisejí s fyzickým a duševním zdravím.",
-    url: "https://pubmed.ncbi.nlm.nih.gov/38589702/",
+    title: "Health benefits of touch interventions",
+    meta: "Nature Human Behaviour · 2024 · meta-analýza 137 studií",
+    url: "https://www.nature.com/articles/s41562-024-01841-8",
+    takeaway: "Souhrn 137 studií popsal malé až střední přínosy některých dotekových intervencí. Zahrnuté situace se ale výrazně lišily.",
   },
   {
-    kind: "dotek",
-    type: "odborný přehled",
-    title: "Affectionate Touch to Promote Relational, Psychological, and Physical Well-Being in Adulthood",
-    author: "Jakubiak & Feeney · Personality and Social Psychology Review · 2017",
-    text: "Teoretický model popisující možné cesty od láskyplného doteku přes regulaci stresu k pocitu bezpečí a vztahové pohodě.",
-    url: "https://pubmed.ncbi.nlm.nih.gov/27225036/",
+    title: "Topography of social touching",
+    meta: "PNAS · 2015 · vztah a přijatelnost doteku",
+    url: "https://www.pnas.org/doi/10.1073/pnas.1519231112",
+    takeaway: "Místa, kterých se smí druzí dotýkat, se mění podle emočního vztahu. Tělo tedy nečte dotek odděleně od sociálního kontextu.",
   },
   {
-    kind: "společnost",
-    type: "kniha · sociologie",
-    title: "Cold Intimacies: The Making of Emotional Capitalism",
-    author: "Eva Illouz · Polity · 2007",
-    text: "Jak ekonomický jazyk, terapie a kultura výkonu vstupují do emocí, vztahů a způsobů, jimiž vyprávíme sami sebe.",
-    url: "https://www.politybooks.com/bookdetail?book_slug=cold-intimacies-the-making-of-emotional-capitalism--9780745639048",
+    title: "Love and affectionate touch in 37 countries",
+    meta: "Scientific Reports · 2023 · 7 880 účastníků",
+    url: "https://www.nature.com/articles/s41598-023-31502-1",
+    takeaway: "Napříč 37 zeměmi souvisela hlášená partnerská láska s něžným dotekem, zároveň však studie zachytila kulturní i individuální rozdíly.",
   },
   {
-    kind: "společnost",
-    type: "kniha · mediální studia",
-    title: "If…Then: Algorithmic Power and Politics",
-    author: "Taina Bucher · Oxford University Press · 2018",
-    text: "Výzkum toho, jak algoritmy nefungují jen jako neutrální nástroje, ale spoluvytvářejí naše jednání, viditelnost a orientaci ve světě.",
-    url: "https://global.oup.com/academic/product/ifthen-9780190493035",
-  },
-  {
-    kind: "společnost",
-    type: "esej · feministická teorie",
-    title: "Uses of the Erotic: The Erotic as Power",
-    author: "Audre Lorde · 1978",
-    text: "Erotično jako schopnost plně cítit vlastní zkušenost, poznat hluboké uspokojení a odmítnout život podle cizího scénáře.",
-    url: "https://uk.sagepub.com/sites/default/files/upm-binaries/11881_Chapter_5.pdf",
-  },
-  {
-    kind: "film",
-    type: "kniha · filmová teorie",
     title: "The Skin of the Film",
-    author: "Laura U. Marks · Duke University Press · 2000",
-    text: "Klíčový text o haptické vizualitě: obrazu, který nezůstává vzdáleným pohledem, ale probouzí tělesnou a smyslovou paměť.",
+    meta: "Laura U. Marks · haptická vizualita",
     url: "https://www.dukeupress.edu/The-Skin-of-the-Film",
+    takeaway: "Teoretické zázemí obrazu, v němž oko neidentifikuje tělo na první dobrou, ale vnímá povrch, zrno, měřítko a vlastní tělesnou paměť.",
   },
   {
-    kind: "film",
-    type: "film · institucionální kontext",
-    title: "The Arbor",
-    author: "Clio Barnard · British Film Institute · 2010",
-    text: "Dokument pracující s autentickými nahrávkami Andrey Dunbar a jejích blízkých, které před kamerou synchronizují jiní performeři.",
-    url: "https://www.bfi.org.uk/film/255658f7-981a-55e9-a075-67e559a26191/the-arbor",
+    title: "Techniques of the Body",
+    meta: "Marcel Mauss · Economy and Society",
+    url: "https://www.tandfonline.com/doi/abs/10.1080/03085147300000003",
+    takeaway: "I zdánlivě přirozené zacházení s tělem se učíme ve společnosti. Stud, gesto a způsob kontaktu nejsou čistě biologické samozřejmosti.",
   },
   {
-    kind: "bezpečí",
-    type: "profesní standard · film",
-    title: "Standards and Protocols for the Use of Intimacy Coordinators",
-    author: "SAG-AFTRA · aktualizace 2024",
-    text: "Průmyslový rámec pro informovaný a průběžný souhlas, popsaný rozsah scény, uzavřený set a bezpečné změny choreografie.",
+    title: "Uses of the Erotic: The Erotic as Power",
+    meta: "Audre Lorde · Sister Outsider",
+    url: "https://www.penguinrandomhouse.com/books/608235/sister-outsider-by-audre-lorde/",
+    takeaway: "Erotično zde není zboží pro cizí pohled, ale schopnost rozeznat vlastní prožitek, radost, touhu a hranici.",
+  },
+  {
+    title: "Cold Intimacies",
+    meta: "Eva Illouz · citový kapitalismus",
+    url: "https://www.politybooks.com/bookdetail?book_slug=cold-intimacies-the-making-of-emotional-capitalism--9780745639048",
+    takeaway: "Blízké vztahy stále častěji popisujeme jazykem směny, investice, volby a návratnosti. Projekt zkoumá, co tato logika dělá s tělem.",
+  },
+  {
+    title: "If...Then: Algorithmic Power and Politics",
+    meta: "Taina Bucher · Oxford University Press",
+    url: "https://global.oup.com/academic/product/ifthen-9780190493035",
+    takeaway: "Algoritmy pouze neřadí obsah. Pomáhají vytvářet podmínky, za nichž se lidé stávají viditelnými, žádoucími nebo naopak mizí.",
+  },
+  {
+    title: "The Platform Society",
+    meta: "van Dijck, Poell & de Waal · Oxford University Press",
+    url: "https://academic.oup.com/book/12378",
+    takeaway: "Platformy organizují sociální provoz podle soukromých mechanismů, které zasahují i do bezpečí, dostupnosti, spravedlnosti a kontroly.",
+  },
+  {
+    title: "Standards for Intimacy Coordinators",
+    meta: "SAG-AFTRA · profesní rámec",
     url: "https://www.sagaftra.org/sites/default/files/sa_documents/SA_IntimacyCoord.pdf",
+    takeaway: "Konkrétní rozsah, průběžný souhlas a choreografie nejsou překážkou tvorby, ale její pracovní infrastrukturou.",
   },
   {
-    kind: "bezpečí",
-    type: "profesní metodika · film",
     title: "Guidance for Shooting Intimacy",
-    author: "Bectu · Equity · 2022",
-    text: "Praktická metodika práce s nahotou, simulovaným sexem, hranicemi, skromnostními pomůckami a duševní pohodou štábu.",
+    meta: "Bectu / Equity · praktická metodika",
     url: "https://www.equity.org.uk/media/3u5pez2c/bectu-guidance-for-shooting-intimacy-october-2022.pdf",
+    takeaway: "Metodika řeší uzavřený set, popis natáčené situace, omezení improvizace a práci s nahotou bez eufemismů.",
   },
 ];
 
-export default function Home() {
-  const [menu, setMenu] = useState(false);
-  const [activeTouch, setActiveTouch] = useState(0);
-  const [activeLayer, setActiveLayer] = useState("obraz");
-  const [openSafety, setOpenSafety] = useState(0);
-  const [sourceFilter, setSourceFilter] = useState("vše");
-  const [age, setAge] = useState(true);
+const projectChapters = [
+  {
+    n: "01",
+    visual: "/gallery/organicky-povrch.webp",
+    title: "Videoportrét začíná na povrchu",
+    lead: "Krátký dokument spojuje detail těla a doteku se samostatným hlasem člověka. Tvář, jméno ani snadno čitelná anatomie nejsou podmínkou.",
+    paragraphs: [
+      "Každý film patří jednomu člověku nebo lidem, kteří chtějí vstoupit do obrazu spolu. Předpokládaná délka je tři až šest minut, deset minut je horní hranice. Kamera jde často tak blízko, že zůstává kůže, chloupky, dlaň, dech, látka, otisk a drobná změna napětí.",
+      "Druhou rovnocennou vrstvu tvoří hlas. Rozhovor nemusí právě viděné gesto popisovat. Může mluvit o dětství, práci, vztazích, samotě, humoru, stěhování nebo chvíli, kdy se člověk naučil něco o vlastní hranici. Mezi obrazem a hlasem vzniká třetí význam.",
+      "Všechny portréty spojuje stejná výzkumná kostra: kdy se člověk ve vlastním těle cítí jako jednající subjekt a kdy jako pozorovaný objekt, co pro něj odděluje blízkost od sexualizace a kdo podle něj vytváří význam intimního obrazu. Odpovědi se nemají sjednotit; právě jejich rozdíly tvoří sérii.",
+      "Anonymita není nouzová cenzura, ale musí být konkrétní. Tvář a jméno lze vynechat, hlas přemluvit nebo změnit a poznávací znaky nesnímat. Ani potom nelze slíbit nulové riziko rozpoznání – někdo může poznat hlas, tetování, pokoj nebo vyprávěnou událost. Každý proto předem vidí, co ho může prozradit, a sám určuje přijatelnou míru.",
+    ],
+    points: ["3–6 minut je přirozená délka", "tvář ani jméno nejsou nutné", "obraz a hlas se navzájem neilustrují"],
+  },
+  {
+    n: "02",
+    visual: "/gallery/zlata-mriz.webp",
+    title: "Proč: co nám vzali?",
+    lead: "Těla jsou všude, ale možnost bezpečné blízkosti, času a pozornosti není rozdělená rovnoměrně. Profil se stává nabídkou a vztah výkonem.",
+    paragraphs: [
+      "Projekt vychází z napětí mezi viditelností těla a možností opravdu v něm žít. Reklama nabízí tělo jako nekonečný projekt, platformy třídí přitažlivost do shod a dosahu a pornografický průmysl často převádí intimitu na měřitelný výkon s předvídatelným koncem.",
+      "Eva Illouz popisuje, jak tržní jazyk vstupuje do citů: mluvíme o investici, hodnotě, dostupnosti a návratnosti. Taina Bucher a autoři Platform Society ukazují, že algoritmy a rozhraní nejsou neutrální kulisa; aktivně organizují viditelnost a sociální jednání.",
+      "Husí kůže nechce předstírat návrat do nevinného světa před internetem. Hledá malý prostor, v němž člověk není profil ani materiál k vytěžení, ale spoluautor významu vlastního těla.",
+    ],
+    points: ["intimita není odměna za výkon", "pozornost není totéž co blízkost", "viditelnost není totéž co možnost rozhodovat"],
+    article: { href: "/texty/kdo-vlastni-nasi-blizkost", label: "Číst makrostudii: Kdo vlastní naši blízkost? ↗" },
+  },
+  {
+    n: "03",
+    visual: "/gallery/drevo-telo.webp",
+    title: "Od oblečení po nahotu",
+    lead: "Portrét může vzniknout v běžném oblečení, v plavkách, bez trička i nahý. Nahota je možnost, ne podmínka ani očekávaný výsledek.",
+    paragraphs: [
+      "Obraz může být úplně nenápadný: dva lidé leží vedle sebe, dlaň spočívá na zádech přes tričko, někdo češe vlasy nebo se nechá obejmout. Intimita nezačíná svlečením. Může být v dechu, odpočinku, blízkosti i v tom, že člověk dovolí kameře zůstat poblíž.",
+      "Součástí série mohou být také otevřenější a nahé portréty, ale u konkrétního člověka to nikdy není skryté zadání. Rozsah se domlouvá předem a může se během přípravy i natáčení jen zmenšovat. Není potřeba se od oblečení postupně „propracovat“ k nahotě a nikdo nebude přesvědčovaný, aby posunul hranici.",
+      "Portrét v oblečení není zkušební ani méně odvážná verze. Nahý portrét zase není automaticky upřímnější. Smysl má jen taková podoba, ve které se člověk poznává a kterou chce opravdu zveřejnit – třeba dotek přes svetr, hlas bez tváře nebo pouhá přítomnost dvou lidí v jednom prostoru.",
+    ],
+    points: ["oblečení i nahota jsou rovnocenné možnosti", "rozsah se domlouvá konkrétně", "změna názoru platí kdykoli"],
+  },
+  {
+    n: "04",
+    visual: "/gallery/ty-to-zvladnes-rukopis.webp",
+    title: "Kdo vstupuje do obrazu a kdo mluví",
+    lead: "Série je otevřená dospělým lidem bez ohledu na gender, věk, tělo, orientaci nebo vztahové uspořádání. Blízkost nemusí být jen párová.",
+    paragraphs: [
+      "Někdo přijde sám, někdo s partnerem, kamarádem, blízkou osobou nebo skupinou. Blízkost může být milenecká, přátelská, pečující, komunitní, polyamorní, hravá nebo těžko pojmenovatelná. Nikdo není rekvizitou pro cizí portrét.",
+      "Rozhovor probíhá samostatně, bez obrazu a v tempu, které člověku vyhovuje. Otázky dostane dopředu. Neptají se jen na dotek, ale na situace, v nichž se vztah k blízkosti utvářel: domov, práce, nemoc, první lásky, přátelství, stud i místa, kde se člověk cítil cize.",
+      "Po natáčení následuje krátké ohlédnutí nad konkrétní zkušeností. Není to kontrola správné emoce, ale další chvíle, kdy lze pojmenovat překvapení, nepohodu, potřebu ubrat nebo něco ve střihu nenechat.",
+    ],
+    points: ["pouze dospělí 18+", "sám, ve dvojici i ve skupině", "hlas může zůstat anonymní"],
+    article: { href: "/texty/telo-se-uci-kulturu", label: "Číst makrostudii: Tělo se učí kulturu ↗" },
+  },
+  {
+    n: "05",
+    visual: "/gallery/kresba-vrstvy.webp",
+    title: "Tak blízko, až se tělo stane krajinou",
+    lead: "Obraz nehledá anatomický katalog. Sleduje póry, tlak, světlo, záhyb, jizvu a materiály, které nesou podobnou paměť jako tělo.",
+    paragraphs: [
+      "Detail může být ostrý a syrový, jindy se rozpadne v páře, skle, odrazu, průsvitné látce nebo mělké hloubce ostrosti. Styl není jeden filtr aplikovaný na všechny. Vychází z konkrétního člověka, místa a druhu blízkosti.",
+      "Prostředím může být byt, vypůjčený ateliér, prádelna, skleník, les, auto v dešti nebo pokoj změněný jednou lampou. Mezi záběry těla mohou vstupovat mokrá látka, kůra, vlas na polštáři nebo matrace vracející se do původního tvaru.",
+      "Zvuk poslouchá povrch: dlaň na kůži, polknutí, dech, bosý krok, vrzání matrace a tření látky. Hudba je možnost, ne příkaz k emoci. Někdy je nejpřesnější soundtrack lednice, déšť a ticho mezi dvěma nádechy.",
+    ],
+    points: ["detail místo anatomické mapy", "místo je součást portrétu", "kůže, látka, dech a ticho"],
+    article: { href: "/texty/kuze-filmu", label: "Číst makrostudii: Když se obraz dívá kůží ↗" },
+  },
+  {
+    n: "06",
+    visual: "/gallery/cerveny-signal-optimized.webp",
+    title: "Souhlas není podpis. Je to způsob práce.",
+    lead: "Domluva pokračuje před kamerou, během natáčení, ve střižně i před každým novým uvedením. Jedno ano neplatí automaticky na všechno.",
+    paragraphs: [
+      "První setkání probíhá bez kamery a bez závazku. Konkrétně se pojmenuje obraz, dotek, případná nahota, anonymita, zvuk i zamýšlené použití. Stejně důležité je říct, co v portrétu nebude.",
+      "Na místě se pracuje střízlivě, v uzavřeném prostoru podle potřeb účastníků a s domluveným stop slovem či gestem. Nový nápad se nejdřív vysloví. Pokračuje se až ve chvíli, kdy všichni vědí, co se mění, a opravdu to chtějí zkusit.",
+      "Účastníci vidí pracovní i finální střih. Zvlášť schvalují konkrétní verzi a okruh použití: portfolio, web, projekci, výstavu, sociální síť nebo festival. Před zveřejněním lze souhlas stáhnout; po veřejném uvedení už nelze poctivě slíbit, že nikde nezůstane kopie. Právě proto se riziko a dosah řeší ještě před prvním zveřejněním. Nová montáž citlivého materiálu znamená nový dialog.",
+    ],
+    points: ["setkání bez kamery", "stop bez vysvětlování", "každé použití se schvaluje zvlášť"],
+    article: { href: "/texty/souhlas-je-infrastruktura", label: "Číst makrostudii: Souhlas je infrastruktura ↗" },
+  },
+  {
+    n: "07",
+    visual: "/gallery/zimni-les.webp",
+    title: "Co vznikne a kudy to může jít",
+    lead: "Nejdřív přesný krátký film, potom případně větší plán. Série nevzniká jako továrna na obsah ani jako automatická přehlídka všech účastníků.",
+    paragraphs: [
+      "První fáze počítá s několika samostatnými portréty. Vedle nich vzniká autorská montáž pro přijímací portfolio na dokumentární, filmové a multimediální školy. Do ní se z projektu dostanou pouze samostatně schválené záběry.",
+      "Celé filmy mohou žít na vlastním webu s věkovou bránou, v komorních projekcích, galeriích, instalacích a na dokumentárních, experimentálních, queer nebo mezioborových festivalech. Sociální sítě intimní obraz často smažou; pornografické platformy mu naopak přisoudí jiný účel. Vlastní rámec proto chrání význam filmu.",
+      "Projekt vzniká komorně, s dostupnou technikou, vypůjčenými místy a malým štábem. Punk a DIY tu neznamenají ledabylost, ale schopnost spojit přesný záměr s omezenými prostředky a otevřeností k živému člověku.",
+      "Dobrovolná podpora nejdřív pokrývá prokazatelné náklady projektu. Pokud po jejich uhrazení vznikne přebytek, nebude osobním ziskem autora: půjde tematicky souvisejícím organizacím a dobročinným aktivitám.",
+    ],
+    points: ["samostatný portrét", "postupně rostoucí série", "portfolio jen ze schválených záběrů"],
+  },
+  {
+    n: "08",
+    visual: "/gallery/brutalistni-okulus.webp",
+    title: "Odbornost, malý tým a přiznané limity",
+    lead: "Jde o komorní autorský film v rané fázi. Malý tým sám o sobě nezaručuje bezpečí, proto se rozsah práce musí řídit tím, co skutečně dokážeme připravit a uhlídat.",
+    paragraphs: [
+      "Projekt je nízkorozpočtový a nemá za sebou velkou instituci ani stálý profesionální štáb. Nechci to skrývat ani vydávat za přednost. Čím citlivější situace vznikne, tím víc potřebuje přípravy, přesnější dohodu a podle potřeby také další odbornou osobu. Když na něco kapacita nestačí, zmenší se rozsah natáčení.",
+      "Komorní tým může snížit počet cizích lidí v místnosti a zpřehlednit, kdo za co odpovídá. Zároveň koncentruje moc u autora. Proto účastník vstupuje i do přípravy a střihu, první schůzka probíhá bez kamery a krásný záběr nemá přednost před změnou názoru.",
+      "V první fázi není účast honorovaná. Není to náhrada placené herecké práce ani slib, že člověka projekt profesně „někam posune“. Jde o dobrovolné spoluautorství vlastního portrétu. Kdo hledá placenou roli nebo jiný druh herecké práce, může projekt bez výčitek odmítnout. Pokud získá finance, práce se má platit.",
+    ],
+    points: ["limity říkám předem", "rozsah se řídí skutečnou kapacitou", "odmítnout je naprosto v pořádku"],
+    article: { href: "/texty/kdo-smi-tvorit", label: "Číst esej: Kdo smí tvořit, když nemá velký štáb? ↗" },
+  },
+];
 
-  useEffect(() => {
-    const seen = sessionStorage.getItem("hk-age");
-    setAge(!seen);
-  }, []);
-
-  function enter() {
-    sessionStorage.setItem("hk-age", "yes");
-    setAge(false);
-  }
+export default async function Home({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const locale = normalizeLocale((await searchParams)?.lang);
+  const localizedEssays = getLocalizedEssays(locale);
+  const localizedChapters = localizeDeep(projectChapters, locale);
+  const localizedGalleryCategories = localizeDeep(siteContent.galleryCategories, locale);
+  const localizedResearch = localizeDeep(researchLinks, locale);
+  const coreEssays = localizedEssays.slice(0, 3);
+  const ideaEssays = localizedEssays.slice(3);
+  const logotypeSrc = locale === "en"
+    ? "/brand/logotyp-en.svg"
+    : locale === "uk"
+      ? "/brand/logotyp-uk.svg"
+      : "/brand/logotyp.svg";
+  const pdfHref = locale === "en"
+    ? "/downloads/goosebumps-project-concept-en.pdf"
+    : locale === "uk"
+      ? "/downloads/husyacha-shkira-kontseptsiya-uk.pdf"
+      : "/downloads/husi-kuze-koncepce-cs.pdf";
 
   return (
-    <main>
-      {age && <div className="ageGate" role="dialog" aria-modal="true" aria-labelledby="age-title">
-        <div className="ageCard">
-          <img className="gateLogo" src="/brand/logo.svg" alt="" />
-          <p className="eyebrow">Citlivý obsah · 18+</p>
-          <h2 id="age-title">Tělo tu není zboží.</h2>
-          <p>Projekt otevřeně pracuje s intimitou, nahotou a souhlasem. Vstupem potvrzuješ, že je ti alespoň 18 let.</p>
-          <div className="gateActions"><button onClick={enter} className="btn primary">Je mi 18 · vstoupit</button><a href="about:blank" className="btn ghost">Odejít</a></div>
-        </div>
-      </div>}
+    <main className="modernHome">
+      <AgeGate locale={locale} />
+      <SiteHeader locale={locale} />
 
-      <header className="siteHeader">
-        <a className="brandMark" href="#top" aria-label="Husí kůže – úvod"><img src="/brand/logo.svg" alt="" /><span>HUSÍ KŮŽE</span></a>
-        <button className="menuBtn" onClick={() => setMenu(!menu)} aria-expanded={menu} aria-label="Otevřít navigaci">{menu ? "Zavřít" : "Menu"}</button>
-        <nav className={menu ? "nav open" : "nav"}>
-          <a href="#projekt" onClick={() => setMenu(false)}>Projekt</a><a href="#proces" onClick={() => setMenu(false)}>Proces</a><a href="#bezpeci" onClick={() => setMenu(false)}>Bezpečí</a><a href="#texty" onClick={() => setMenu(false)}>Texty</a><a href="#zdroje" onClick={() => setMenu(false)}>Zdroje</a><a href="#autor" onClick={() => setMenu(false)}>Autor</a>
-          <a className="navCta" href="#podpora" onClick={() => setMenu(false)}>Podpořit projekt ↘</a>
-        </nav>
-      </header>
-
-      <section id="top" className="hero">
-        <div className="heroCopy">
-          <p className="eyebrow">Filmové portréty doteku · pracovní koncepce</p>
-          <h1 className="srOnly">Husí kůže</h1>
-          <img className="heroLogotype" src="/brand/logotyp.svg" alt="Footage: Husí kůže" />
-          <p className="heroLead">Série krátkých filmových portrétů o těle, blízkosti a odvaze nechat se opravdu vidět.</p>
-          <div className="heroActions"><a className="btn primary" href="#projekt">Prozkoumat projekt ↓</a><a className="btn ghost" href="/FOOTAGE_HUSI_KUZE_v4.5.pdf" download>Stáhnout PDF ↗</a></div>
-        </div>
-        <div className="heroImage"><img src="/gallery/organicka-propast.webp" alt="Organický povrch připomínající kůži a krajinu"/><div className="acidDisc">ODVAHA K<br/>ZRANITELNOSTI</div><span className="verticalTag">HUSÍ KŮŽI NEZAHRAJEŠ</span></div>
-      </section>
-
-      <section id="projekt" className="section cream intro">
-        <div className="sectionNo">01 · O CO JDE</div>
-        <div className="introGrid"><div><h2>Portrét, který začíná na povrchu</h2><p className="bigText">Nejde o přehlídku těl. Jde o mapu toho, co s tělem dělá důvěra.</p></div><div className="bodyCopy"><p>Každý portrét patří jednomu člověku nebo lidem, kteří chtějí vstoupit do obrazu spolu. Tvář ani jméno nejsou podmínkou. Kamera jde tak blízko, že zůstává kůže, chloupky, dlaň, otisk, dech, látka, světlo a drobná změna napětí.</p><p>Druhou polovinu filmu tvoří hlas. Nemusí vysvětlovat obraz. Může nést jinou chvíli života, zatímco tělo vytváří druhý způsob portrétování.</p></div></div>
-        <blockquote>„Husí kůži nezahraješ. Kamera hledá reakce, které vznikají dřív než póza.“</blockquote>
-      </section>
-
-      <section className="imageCurrent" aria-label="Obrazový proud projektu">
-        {visualEssay.slice(0,4).map((image, index) => <figure className={`currentImage currentImage${index + 1}`} key={image.src}><img src={image.src} alt={image.alt} loading="lazy" /><figcaption>{String(index + 1).padStart(2,"0")} · {image.label}</figcaption></figure>)}
-      </section>
-
-      <section className="section navy problem">
-        <div className="sectionNo">02 · PROČ</div><h2>Co nám vzali?</h2><p className="lede">Těla nikdy nebyla viditelnější. O to snáz se ale mohou vzdálit lidem, kteří v nich skutečně žijí.</p>
-        <div className="problemGrid"><div className="problemCopy"><p>Současná vizuální kultura ukazuje těla téměř nepřetržitě, ale většinou jako objekty hodnocení, žádoucnosti, výkonu nebo spotřeby. Projekt se ptá, zda lze intimitu filmovat tak, aby člověk před kamerou neztratil kontrolu nad významem svého těla.</p><p>Pečující dotek přitom není jen dekorace vztahu. Výzkum ho spojuje s regulací stresu, pocitem bezpečí a psychickou pohodou — vždy ale záleží na tom, zda je chtěný, vzájemný a zasazený do konkrétního vztahu.</p><div className="inlineSources"><a href="https://royalsocietypublishing.org/rsos/article/8/9/210287/96157/Social-touch-deprivation-during-COVID-19-effects" target="_blank" rel="noreferrer">studie o nedostatku doteku ↗</a><a href="https://pubmed.ncbi.nlm.nih.gov/38589702/" target="_blank" rel="noreferrer">meta-analýza 137 studií ↗</a></div></div><div className="tiles"><div>TĚLO<small>projekt bez konce</small></div><div>PROFIL<small>nabídka k posouzení</small></div><div>POZORNOST<small>dosah, reakce, skóre</small></div><div>BLÍZKOST<small>výkon s očekávaným výsledkem</small></div></div></div>
-      </section>
-
-      <section id="proces" className="section cream process">
-        <div className="sectionNo">03 · JAK PORTRÉT VZNIKÁ</div><h2>Nejdřív člověk.<br/>Teprve potom obraz.</h2><p className="lede dark">První setkání proběhne bez kamery a bez nutnosti cokoli slíbit. Teprve z něj vznikne návrh portrétu.</p>
-        <div className="steps">{steps.map((s,i)=><button key={s.n} className="step" onClick={()=>document.getElementById(`step-${i}`)?.classList.toggle("show")} aria-controls={`step-${i}`}><span>{s.n}</span><strong>{s.title}</strong><p id={`step-${i}`}>{s.text}</p><i>+</i></button>)}</div>
-      </section>
-
-      <section className="section spectrum">
-        <div className="sectionNo">04 · ROZSAH</div><h2>Co se může dít</h2>
-        <div className="spectrumTabs" role="tablist">{spectrum.map((s,i)=><button role="tab" aria-selected={activeTouch===i} className={activeTouch===i?"active":""} key={s.label} onClick={()=>setActiveTouch(i)}><span>{s.label}</span><small>{s.sub}</small></button>)}</div>
-        <div className="spectrumDetail"><span>0{activeTouch+1}</span><p>{spectrum[activeTouch].text}</p></div><p className="manifest">Portrét není méně úplný, když zůstane u prvního doteku. Je úplný tehdy, když odpovídá člověku, který v něm je.</p>
-      </section>
-
-      <section className="section black layers">
-        <div className="sectionNo">05 · OBRAZ, HLAS, ZVUK</div><h2>Tak blízko, až se tělo stane krajinou</h2>
-        <div className="layerTabs">{["obraz","hlas","zvuk"].map(x=><button className={activeLayer===x?"active":""} onClick={()=>setActiveLayer(x)} key={x}>{x}</button>)}</div>
-        <div className="layerContent">
-          {activeLayer==="obraz" && <><img src="/gallery/zlata-mriz.webp" alt="Zlatý povrch rozdělený organickou mříží"/><div><h3>Detail, ne anatomická mapa</h3><p>Výsek kůže může vyplnit obraz stejně jako stěna, kůra stromu nebo krajina. Styl není jednotný filtr; každý portrét si hledá vlastní způsob vidění.</p><a className="layerLink" href="https://www.dukeupress.edu/The-Skin-of-the-Film" target="_blank" rel="noreferrer">Laura U. Marks · haptická vizualita ↗</a></div></>}
-          {activeLayer==="hlas" && <><img src="/gallery/kresba-tvare.webp" alt="Bílá kresba tváře v černém prostoru"/><div><h3>Rozhovor nemusí nic ilustrovat</h3><p>Hlas může mluvit o rodině, samotě, práci nebo místě, kde se člověk cítí doma. Mezi slovem a obrazem vzniká třetí význam.</p></div></>}
-          {activeLayer==="zvuk" && <><img src="/gallery/temny-lustr.webp" alt="Temný lustr překrytý organickou strukturou"/><div><h3>Poslouchat povrch</h3><p>Dlaň přejíždějící po kůži, polknutí, změna dechu, krok naboso, vrzání matrace. Ticho tu není prázdno.</p></div></>}
-        </div>
-      </section>
-
-      <section className="imageCurrent imageCurrentDark" aria-label="Druhá část obrazového proudu projektu">
-        {visualEssay.slice(4).map((image, index) => <figure className={`currentImage currentImage${index + 1}`} key={image.src}><img src={image.src} alt={image.alt} loading="lazy" /><figcaption>{String(index + 5).padStart(2,"0")} · {image.label}</figcaption></figure>)}
-      </section>
-
-      <section id="bezpeci" className="section cream safety">
-        <div className="sectionNo">06 · BEZPEČÍ</div><h2>Souhlas není podpis.<br/>Je to způsob práce.</h2>
-        <div className="safetyGrid">{safety.map((s,i)=><div className={openSafety===i?"safetyItem open":"safetyItem"} key={s[0]}><button onClick={()=>setOpenSafety(openSafety===i?-1:i)} aria-expanded={openSafety===i}><span>0{i+1}</span>{s[0]}<i>{openSafety===i?"−":"+"}</i></button><p>{s[1]}</p></div>)}</div>
-        <div className="safetyQuote">Dotek i natáčení lze kdykoli zastavit, zpomalit, změnit nebo úplně vynechat. Bez nutnosti obhajovat důvod.</div>
-        <div className="methodNote"><span>METODICKÉ ZÁZEMÍ</span><p>Rámec vychází z principů profesionální koordinace intimních scén. Nejde o tvrzení, že malý autorský projekt nahrazuje vyškolenou koordinátorku či koordinátora — právě naopak. Standardy používám jako minimum pro přípravu a externí konzultaci.</p><div><a href="https://www.sagaftra.org/sites/default/files/sa_documents/SA_IntimacyCoord.pdf" target="_blank" rel="noreferrer">SAG-AFTRA · standardy ↗</a><a href="https://www.equity.org.uk/media/3u5pez2c/bectu-guidance-for-shooting-intimacy-october-2022.pdf" target="_blank" rel="noreferrer">Bectu / Equity · metodika ↗</a></div></div>
-      </section>
-
-      <section className="section navy atlas">
-        <div className="sectionNo">07 · VIZUÁLNÍ A METODICKÝ ATLAS</div><h2>Obrazy, které otevírají cestu</h2><p className="lede">Klikni na kartu a otevři původní dílo nebo institucionální zdroj.</p>
-        <div className="atlasGrid">{atlas.map(a=><a href={a.url} target="_blank" rel="noreferrer" className="atlasCard" key={a.title}><div className="atlasImg"><img src={a.img} alt=""/><span>↗</span></div><small>{a.year}</small><h3>{a.title}</h3><p>{a.text}</p></a>)}</div>
-      </section>
-
-      <section id="texty" className="section essays">
-        <div className="essayIndexHead"><div><div className="sectionNo">08 · MAKROSTUDIE</div><h2>Texty pod povrchem</h2></div><div><p className="lede dark">Delší autorské studie propojují filmovou teorii, sociologii, psychologický výzkum a praktickou etiku natáčení.</p><p>Nejsou to akademické články předstírající recenzní řízení. Jsou to argumentované eseje s dohledatelnými zdroji, otevřenými limity a prostorem pro nesouhlas.</p></div></div>
-        <div className="essayCards">
-          {essays.map((essay, index) => <a className="essayCard" href={`/texty/${essay.slug}`} key={essay.slug}>
-            <figure><img src={essay.cover} alt={essay.coverAlt}/><span>0{index + 1}</span></figure>
-            <div><small>{essay.kicker}</small><h3>{essay.title}</h3><p>{essay.dek}</p><b>{essay.read} · otevřít text ↗</b></div>
-          </a>)}
-        </div>
-      </section>
-
-      <section id="zdroje" className="section sources">
-        <div className="sourceHead"><div><div className="sectionNo">09 · STUDIE A TEXTY</div><h2>Čti dál.<br/>Nebo mi odporuj.</h2></div><p>Projekt nestojí na jednom univerzálním návodu k intimitě. Tohle je otevřená knihovna textů, které formují jeho otázky, obrazový jazyk a bezpečnostní rámec. Odkazy vedou na původní studie, vydavatele nebo profesní instituce.</p></div>
-        <div className="sourceFilters" aria-label="Filtrovat zdroje">{sourceKinds.map(kind=><button key={kind} className={sourceFilter===kind?"active":""} onClick={()=>setSourceFilter(kind)} aria-pressed={sourceFilter===kind}>{kind}</button>)}</div>
-        <div className="sourceGrid" aria-live="polite">{sources.filter(source=>sourceFilter==="vše"||source.kind===sourceFilter).map((source,index)=><a className="sourceCard" href={source.url} target="_blank" rel="noreferrer" key={source.title}><div className="sourceTop"><span>{source.type}</span><b>↗</b></div><small>{String(index+1).padStart(2,"0")} · {source.kind}</small><h3>{source.title}</h3><p className="sourceAuthor">{source.author}</p><p>{source.text}</p></a>)}</div>
-        <p className="sourceDisclaimer">Výzkum doteku popisuje průměrné souvislosti a intervence, ne automatický účinek každého kontaktu. Chtěný dotek může být podpůrný; nechtěný dotek je překročení hranice. Kontext není drobným písmem pod čarou — je to celá věta.</p>
-      </section>
-
-      <section id="autor" className="section black author">
-        <div className="authorImage"><img src="/gallery/prudky-potok-explicitni.png" alt="Štěpán Chalupa stojí nahý v horském potoce"/><span>AUTOPORTRÉT · PRUDKÝ POTOK</span></div><div><div className="sectionNo">10 · AUTOR</div><h2>Kdo to točí</h2><p className="lede">Jmenuju se Štěpán Chalupa. Vystudoval jsem filmovou vědu na Masarykově univerzitě, režíroval vzdělávací formát What The Fact? pro Českou televizi a tvořím videoeseje, fotografie a cestovní deníky.</p><p>Jsem neurodivergentní a senzoricky citlivý. Právě proto mě zajímá, co se stane, když obranu nepovažujeme za konečnou identitu. Nechci stát za kamerou v bezpečí a po druhých žádat zranitelnost — do obrazu proto vstupuju i vlastním tělem.</p><p>První portréty vznikají také pro přijímačkové portfolio na dokumentární, filmové a multimediální školy. Projekt je ale plánovaný jako dlouhodobá série, ne jako jednorázové cvičení, které po přijímačkách usne v šuplíku.</p></div>
-      </section>
-
-      <section id="podpora" className="section support">
-        <div className="supportCopy">
-          <div className="sectionNo">11 · NEZÁVISLÁ PODPORA</div>
-          <h2>Zatím bez instituce.<br/>Ne bez práce.</h2>
-          <p className="supportLead">Husí kůže zatím vzniká nezávisle, z vlastního času a prostředků. Nemá za sebou produkci, grant ani značku, která by si za podporu koupila kus významu.</p>
-          <p>Podpora pomáhá zaplatit techniku, cestu, prostor, postprodukci a hlavně čas potřebný k citlivé přípravě portrétů. Vedle filmů díky ní mohou vznikat i volně přístupné autorské články, makrostudie, průběžné poznámky a úvahy, které propojují film, tělo, společnost a etiku práce se zdroji.</p>
-          <p>Částka není vstupenka k obsahu ani hlas navíc při rozhodování o projektu. Je to prostě možnost pomoct, aby mohl růst pomaleji, poctivěji a bez potřeby převlékat intimitu za reklamní plochu.</p>
-          <div className="supportLinks">
-            <a className="btn darkBtn" href="/podpora/qr-platba.png" target="_blank">Otevřít QR platbu ↗</a>
-            <a className="supportTextLink" href="#texty">Přečíst autorské texty ↓</a>
+      <section id="top" className="modernHero">
+        <div className="modernHeroCopy">
+          <p className="sectionLabel">{t(locale, "Filmové portréty doteku · pracovní projekt")}</p>
+          <h1>
+            <img src={logotypeSrc} alt={t(locale, "FOOTAGE: HUSÍ KŮŽE")} width="680" height="610" />
+          </h1>
+          <p className="heroLeadModern">{t(locale, "Série krátkých filmových portrétů o doteku, blízkosti a o tom, co s tělem dělá důvěra.")}</p>
+          <p className="heroText">{t(locale, "Portrét může zůstat úplně v běžném oblečení a zachytit hlas, dech, objetí nebo dotek přes látku. Plavky, částečné odhalení i nahota jsou další možnosti, ne stupně, ke kterým se má člověk propracovat. Tvář ani jméno nejsou podmínkou.")}</p>
+          <div className="heroLinks">
+            <a className="buttonStrong" href={pdfHref} target="_blank" rel="noreferrer">{t(locale, "Otevřít stručné PDF ↗")}</a>
+            <a className="buttonQuiet" href="#texty">{t(locale, "Číst autorské texty ↓")}</a>
           </div>
         </div>
-        <a className="qrCard" href="/podpora/qr-platba.png" target="_blank" aria-label="Otevřít QR kód pro podporu projektu v plné velikosti">
-          <span>JEDNORÁZOVÁ PODPORA</span>
-          <img src="/podpora/qr-platba.png" alt="QR kód pro platbu na podporu projektu Husí kůže" />
-          <strong>Naskenuj v bankovní aplikaci</strong>
-          <small>Kliknutím otevřeš QR v plné velikosti.</small>
-        </a>
+        <ZoomableImage
+          className="heroZoom"
+          src="/gallery/jehelnice-lebka.webp"
+          alt={t(locale, "Stylizovaná lebka s očima obklopenýma špendlíky")}
+          title={t(locale, "Obrana / autoportrét")}
+          caption={t(locale, "Senzorická přecitlivělost jako výchozí obraz projektu: ochranný systém, který brání zranění, ale někdy také blízkosti.")}
+          eager
+        />
       </section>
 
-      <section className="manifestSection"><p>ZAŤATÁ PĚST<br/>NEOBEJME.<br/><em>UVOLNI JI.</em></p><div className="scribble"></div><span>ODVAHA K ZRANITELNOSTI</span></section>
+      <section className="pdfEntry" aria-labelledby="pdf-title">
+        <figure className="pdfCover">
+          <img src="/media/pdf-cover.webp" alt={t(locale, "Titulní strana obrazové koncepce Husí kůže")} loading="lazy" decoding="async" />
+        </figure>
+        <div className="pdfCopy">
+          <p className="sectionLabel">{t(locale, "Stručná obrazová verze")}</p>
+          <h2 id="pdf-title">{t(locale, "Nejdřív si projekt prohlédni.")}</h2>
+          <p>{t(locale, "Obraz, hlas, škála intimity, hranice i způsob práce v jedné soustředěné koncepci. Bez nutnosti číst celý web.")}</p>
+          <div className="pdfActions">
+            <a href={pdfHref} target="_blank" rel="noreferrer">{t(locale, "Prohlédnout PDF ↗")}</a>
+            <a href={pdfHref} download>{t(locale, "Uložit do zařízení ↓")}</a>
+          </div>
+        </div>
+      </section>
 
-      <section id="kontakt" className="section contact"><p className="eyebrow">Projekt je v přípravě · Praha · 2026</p><h2>Chceš se zeptat,<br/>přidat nebo jen nesouhlasit?</h2><p>První schůzka je vždy bez kamery a bez závazku. Můžeš se ozvat kvůli účasti, konzultaci, spolupráci nebo obyčejné otázce.</p><div className="contactActions"><a className="btn darkBtn" href="mailto:stepanchalupa@post.cz?subject=Husí kůže">Napsat e-mail ↗</a><a className="btn ghostDark" href="tel:+420728568913">+420 728 568 913</a></div></section>
-      <footer><a className="brandMark footerBrand" href="#top"><img src="/brand/logo.svg" alt="" /><span>HUSÍ KŮŽE</span></a><p>© 2026 Štěpán Chalupa · pracovní koncepce</p><a href="/FOOTAGE_HUSI_KUZE_v4.5.pdf" download>PDF ke stažení ↓</a></footer>
+      <section className="researchQuestion" aria-labelledby="research-question-title">
+        <p className="sectionLabel">{t(locale, "Ústřední výzkumná otázka")}</p>
+        <h2 id="research-question-title">{t(locale, "Kdy je tělo v obraze ještě přítomným subjektem – a kdy už se mění v objekt pro cizí pohled?")}</h2>
+        <div className="researchBody">
+          <div>
+            <p>{t(locale, "Každý portrét zkoumá stejnou hranici: co způsobí, že blízký obraz působí něžně, pečujícím způsobem, sexuálně, klinicky nebo objektifikujícím dojmem? Význam nevytváří množství odhalené kůže, ale vztah, kompozice, zvuk, střih, kulturní zkušenost a moc rozhodnout, co smí být vidět.")}</p>
+            <p>{t(locale, "Účastníci dostávají společnou kostru otázek, ale film po nich nechce jednotnou odpověď. Zajímá ho okamžik, kdy se člověk v obraze ještě poznává jako někdo, kdo jedná – a kdy má pocit, že už je pouze materiálem, o němž rozhoduje někdo jiný.")}</p>
+          </div>
+          <figure className="researchVisual">
+            <img src="/gallery/sklenene-oko-extreme-optimized.webp" alt={t(locale, "Abstraktní pohled přes zakřivené sklo")} loading="lazy" decoding="async" />
+            <img src="/gallery/umlcena-tvar.webp" alt={t(locale, "Kresba tváře s očima a ústy překrytými tmavými pásy")} loading="lazy" decoding="async" />
+            <figcaption>{t(locale, "Pohled, který deformuje, a tvář, jejíž hlas prochází přes cizí filtr.")}</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section className="decisionSection" aria-labelledby="decision-title">
+        <header>
+          <p className="sectionLabel">{t(locale, "Než se rozhodneš")}</p>
+          <h2 id="decision-title">{t(locale, "Nehledám výkon, odvahu ani automatické ano.")}</h2>
+          <p>{t(locale, "Projekt není pro každého a odmítnutí není chyba v komunikaci. Tohle jsou věci, které mají být jasné dřív, než vůbec dojde na první schůzku.")}</p>
+        </header>
+        <div className="decisionGrid">
+          {[
+            [
+              "Nahota není podmínka ani skrytý cíl.",
+              "Portrét může zůstat v běžném oblečení, pracovat jen s hlasem nebo zachytit blízkost bez sexuálního významu. Otevřenější poloha se řeší pouze s člověkem, který ji sám chce – nepovažuje se za odvážnější ani hodnotnější výsledek.",
+            ],
+            [
+              "Nejde o hereckou roli.",
+              "Nikdo nemá zahrát intimitu, předvést emoci ani splnit režijní zadání. Účast není náhrada placené herecké práce ani slib materiálu do showreelu. Jde o spoluautorství vlastního dokumentárního portrétu.",
+            ],
+            [
+              "Anonymita se plánuje, neslibuje kouzlem.",
+              "Tvář ani jméno nejsou potřeba a lze změnit hlas i skrýt poznávací znaky. Úplnou nerozpoznatelnost ale nelze garantovat, protože člověka může prozradit hlas, tetování, prostředí nebo příběh. Riziko se proto probírá konkrétně předem.",
+            ],
+            [
+              "První schůzka není casting.",
+              "Probíhá bez kamery, bez svlékání a bez závazku. Jejím cílem není člověka přesvědčit, ale zjistit, zda si obě strany rozumějí, zda projekt dává smysl a jaká podoba by vůbec mohla být bezpečná.",
+            ],
+            [
+              "Schválení má konkrétní rozsah.",
+              "Účastník vidí pracovní i finální střih a schvaluje zvlášť konkrétní verzi i způsob uvedení. Před zveřejněním může souhlas stáhnout. Po veřejném uvedení už internet neumí zaručit odstranění všech kopií, proto se dosah řeší předem bez eufemismů.",
+            ],
+            [
+              "Odmítnutí není problém k vyřešení.",
+              "Někdo nechce své tělo nebo intimitu veřejně sdílet ani anonymně a nepotřebuje k tomu lepší argument. Zpětná vazba ani anonymní formulář nejsou nábor oklikou. Ne, nejistota i ticho zůstávají platnými odpověďmi.",
+            ],
+          ].map(([title, body], index) => (
+            <details key={title}>
+              <summary><span>0{index + 1}</span><strong>{t(locale, title)}</strong><b aria-hidden="true">+</b></summary>
+              <div className="decisionContent">
+                <img src={decisionImages[index]} alt="" loading="lazy" decoding="async" />
+                <p>{t(locale, body)}</p>
+              </div>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section id="texty" className="storySection">
+        <header className="compactHead">
+          <p className="sectionLabel">{t(locale, "3 texty přímo k filmu")}</p>
+          <h2>{t(locale, "Nejdřív obraz, tělo a způsob práce.")}</h2>
+          <p>{t(locale, "Tři základní makrostudie vysvětlují, proč dotek není univerzální jazyk, jak může kamera místo anatomie vnímat povrch a proč souhlas pokračuje i ve střižně.")}</p>
+        </header>
+        <div className="storyGrid">
+          {coreEssays.map((essay, index) => (
+            <article
+              className={index === 0 ? "storyCard storyCardFeatured" : "storyCard"}
+              data-essay={essay.slug}
+              key={essay.slug}
+            >
+              <ZoomableImage
+                className="storyImage"
+                src={essay.cover}
+                alt={essay.coverAlt}
+                title={essay.title}
+                caption={t(locale, "Obrazová studie k autorskému textu projektu Husí kůže.")}
+              />
+              <a className="storyCopy" href={withLocale(`/texty/${essay.slug}`, locale)}>
+                <span>0{index + 1} · {essay.kicker}</span>
+                <h3>{essay.title}</h3>
+                <p>{essay.dek}</p>
+                <strong>{getEssayReadingTime(essay, locale)} · {t(locale, "číst celý text ↗")}</strong>
+              </a>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="uvahy" className="ideaSection" aria-labelledby="ideas-title">
+        <header className="ideaHead">
+          <p className="sectionLabel">{t(locale, "Myšlenkové podloží")} · {ideaEssays.length} {t(locale, "esejí")}</p>
+          <h2 id="ideas-title">{t(locale, "Co je za obrazem.")}</h2>
+          <p>{t(locale, "Intimita pod vládou platforem, kulturně naučené tělo, technoanarchismus, demokratizace tvorby, generativní AI, Umění hoven a osobní cesta od obrany k možnosti blízkosti.")}</p>
+        </header>
+        <div className="ideaGrid">
+          {ideaEssays.map((essay, index) => (
+            <article className="ideaCard" data-essay={essay.slug} key={essay.slug}>
+              <ZoomableImage
+                className="ideaImage"
+                src={essay.cover}
+                alt={essay.coverAlt}
+                title={essay.title}
+                caption={t(locale, "Obrazová studie k eseji projektu Husí kůže.")}
+              />
+              <a href={withLocale(`/texty/${essay.slug}`, locale)}>
+                <span>{String(index + 4).padStart(2, "0")} · {essay.kicker}</span>
+                <h3>{essay.title}</h3>
+                <p>{essay.dek}</p>
+                <strong>{getEssayReadingTime(essay, locale)} · {t(locale, "otevřít esej ↗")}</strong>
+              </a>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="projekt" className="projectGuide">
+        <header className="guideHead">
+          <p className="sectionLabel">{t(locale, "Podrobná koncepce · 8 kapitol")}</p>
+          <h2>{t(locale, "Jak může portrét vypadat a jak vzniká.")}</h2>
+          <p>{t(locale, "Osm rozbalovacích kapitol popisuje obraz, hlas, míru odhalení, průběh natáčení i schvalování výsledku. Zavřené dávají rychlý přehled, otevřené jdou do konkrétního postupu.")}</p>
+        </header>
+        <div className="guideList">
+          {localizedChapters.map((chapter) => (
+            <details className="guideChapter" key={chapter.n}>
+              <summary>
+                <span className="guideNumber">{chapter.n}</span>
+                <span className="guideSummaryCopy">
+                  <strong>{chapter.title}</strong>
+                  <small>{chapter.lead}</small>
+                </span>
+                <span className="guidePlus" aria-hidden="true">+</span>
+              </summary>
+              <div className="guideBody">
+                <ZoomableImage
+                  className="guideVisual"
+                  src={chapter.visual}
+                  alt={chapter.title}
+                  title={chapter.title}
+                  caption={t(locale, "Obrazová poznámka k této kapitole koncepce.")}
+                />
+                <div className="guideText">
+                  {chapter.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+                  {chapter.n === "03" && (
+                    <>
+                      <div className="freedomSpectrum" aria-label={t(locale, "Možná míra odhalení v portrétu")}>
+                        <div><span>01</span><strong>{t(locale, "Oblečení")}</strong><small>{t(locale, "Dotek přes látku, objetí, vlasy, dech.")}</small></div>
+                        <div><span>02</span><strong>{t(locale, "Plavky")}</strong><small>{t(locale, "Částečně odkryté tělo bez nahoty.")}</small></div>
+                        <div><span>03</span><strong>{t(locale, "Bez trička")}</strong><small>{t(locale, "Rozsah i způsob snímání se domluví předem.")}</small></div>
+                        <div><span>04</span><strong>{t(locale, "Nahota")}</strong><small>{t(locale, "Vítaná možnost pouze pro toho, kdo ji sám chce.")}</small></div>
+                      </div>
+                      <p className="spectrumNote"><strong>{t(locale, "Neexistuje správná míra odhalení.")}</strong> {t(locale, "Projekt chce zachytit celou škálu, ne dostat každého člověka na její konec.")}</p>
+                    </>
+                  )}
+                  {chapter.article && <a className="guideArticleLink" href={withLocale(chapter.article.href, locale)}>{chapter.article.label}</a>}
+                </div>
+                <aside className="guidePoints" aria-label={`Klíčové body kapitoly ${chapter.title}`}>
+                  <span>{t(locale, "V praxi")}</span>
+                  {chapter.points.map((point) => <strong key={point}>{point}</strong>)}
+                </aside>
+              </div>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section id="formular" className="formSection" aria-labelledby="form-title">
+        <ProjectForm locale={locale} />
+      </section>
+
+      <section id="obraz" className="gallerySection">
+        <header className="compactHead compactHeadLight">
+          <p className="sectionLabel">{t(locale, "Obrazový materiál")}</p>
+          <h2>{t(locale, "Klikni. Obraz se otevře i s kontextem.")}</h2>
+          <p>{t(locale, "Galerie je vodorovná, aby z webu nebyl scrollovací sarkofág. Tažením nebo kolečkem pokračuješ doprava.")}</p>
+        </header>
+        {localizedGalleryCategories.map((category) => (
+          <section className="galleryCategory" key={category.id}>
+            <header>
+              <h3>{category.title}</h3>
+              <p>{category.description}</p>
+            </header>
+            <div className="horizontalGallery">
+              {category.images.map((image) => (
+                <ZoomableImage
+                  key={image.src}
+                  className="galleryItem"
+                  src={image.src}
+                  alt={image.alt}
+                  title={image.title}
+                  caption={image.caption}
+                  protectedPreview={"protectedPreview" in image ? image.protectedPreview : false}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+      </section>
+
+      <section id="dukazy" className="evidenceSection">
+        <header className="evidenceHead">
+          <p className="sectionLabel">{t(locale, "Důkazy, teorie a pracovní standardy")}</p>
+          <h2>{t(locale, "Na čem projekt stojí.")}</h2>
+          <p>{t(locale, "U každého zdroje píšu, co z něj pro projekt vyvozuju a co už by bylo přehánění. Odkazy vedou přímo na studii, knihu nebo profesní metodiku.")}</p>
+          <div className="evidenceVisual" aria-hidden="true">
+            <img src="/gallery/brutalistni-okulus.webp" alt="" loading="lazy" decoding="async" />
+            <img src="/gallery/konstruktivisticka-vez.webp" alt="" loading="lazy" decoding="async" />
+            <img src="/gallery/organicka-propast.webp" alt="" loading="lazy" decoding="async" />
+          </div>
+        </header>
+        <div className="evidenceGrid">
+          {localizedResearch.map((item, index) => (
+            <a href={item.url} target="_blank" rel="noreferrer" key={item.title}>
+              <span className="evidenceNo">{String(index + 1).padStart(2, "0")}</span>
+              <strong>{item.title}</strong>
+              <small>{item.meta}</small>
+              <p>{item.takeaway}</p>
+              <b>{t(locale, "Otevřít původní zdroj ↗")}</b>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section className="supportSection" aria-labelledby="support-title">
+        <div className="supportCopy">
+          <p className="sectionLabel">{t(locale, "Podpora a transparentnost")}</p>
+          <h2 id="support-title">{t(locale, "Příspěvek není vstupenka k tělu ani právo rozhodovat o filmu.")}</h2>
+          <p>{t(locale, "Podpora nejdřív pokrývá prokazatelné náklady: techniku, dopravu, prostor, bezpečné uložení dat, titulky, překlady a odborné konzultace. Pokud po jejich uhrazení vznikne přebytek, nebude osobním ziskem autora. Půjde tematicky souvisejícím organizacím a dobročinným aktivitám; konkrétní příjemci budou zveřejněni až podle skutečné výše a účelu podpory.")}</p>
+          <div className="accountNumber">
+            <span>{t(locale, "Číslo účtu")}</span>
+            <strong>2703541582 / 2010</strong>
+          </div>
+        </div>
+        <figure className="supportQr">
+          <div className="supportQrHead">
+            <span>{t(locale, "Dobrovolná podpora")}</span>
+            <strong>{t(locale, "Naskenuj v bankovní aplikaci")}</strong>
+          </div>
+          <div className="supportQrViewport">
+            <img src="/podpora/qr-platba-clean.png" alt={t(locale, "QR kód pro dobrovolnou podporu projektu")} loading="lazy" decoding="async" />
+          </div>
+          <figcaption>
+            <strong>{t(locale, "Částku určuješ ty.")}</strong>
+            <span>{t(locale, "QR neobsahuje přednastavenou částku a příspěvek nevytváří žádný nárok na podobu filmu.")}</span>
+          </figcaption>
+        </figure>
+      </section>
+
+      <section className="authorArchive" aria-labelledby="author-archive-title">
+        <header>
+          <p className="sectionLabel">{t(locale, "Osobní východisko · odvaha k zranitelnosti")}</p>
+          <h2 id="author-archive-title">{t(locale, "Nejdu k tématu z čisté laboratoře.")}</h2>
+          <div className="authorArchiveIntro">
+            <p>{t(locale, "Tyhle obrazy nejsou lineární příběh o uzdravení ani důkaz, že už mám všechno vyřešené. Jsou to různé způsoby, jak jsem se snažil být ve světě: od odpojení přes kalení a hranou roli až k pokusu znovu se nechat opravdu vidět.")}</p>
+            <blockquote>{t(locale, "„Zaťatá pěst dokáže přežít úder, ale nedokáže obejmout. A některé dny byly prostě na hovno — ne poeticky, ale doopravdy.“")}</blockquote>
+          </div>
+        </header>
+        <div className="authorArchiveGrid">
+          <figure className="authorArchiveWide">
+            <img src="/gallery/autor-svedsko.webp" alt={t(locale, "Štěpán sám na zamrzlém jezeře ve Švédsku")} loading="lazy" decoding="async" />
+            <figcaption><strong>{t(locale, "Švédsko / odpojení")}</strong><span>{t(locale, "Z cesty za polární kruh, z období, kdy mi nebylo dobře a ticho nebylo romantické.")}</span></figcaption>
+          </figure>
+          <figure>
+            <img src="/gallery/autor-kaleni.webp" alt={t(locale, "Rozmazaná noční fotografie Štěpána s lahví")} loading="lazy" decoding="async" />
+            <figcaption><strong>{t(locale, "Kalení / únik")}</strong><span>{t(locale, "Období, kdy byl společenský pohyb často snazší než přiznaná únava a blízkost.")}</span></figcaption>
+          </figure>
+          <figure>
+            <img src="/gallery/autor-role.webp" alt={t(locale, "Stylizovaný autoportrét Štěpána ve slaměném klobouku a růžových brýlích")} loading="lazy" decoding="async" />
+            <figcaption><strong>{t(locale, "Role / maska")}</strong><span>{t(locale, "Hravá vizuální identita jako svoboda i způsob, jak schovat nejistotu před publikem.")}</span></figcaption>
+          </figure>
+          <figure className="authorArchivePoster">
+            <img src="/gallery/autor-metafyzicka-pout.webp" alt={t(locale, "Autorská koláž Metafyzická pouť")} loading="lazy" decoding="async" />
+            <figcaption><strong>{t(locale, "Metafyzická pouť / konec strachu ze zranitelnosti")}</strong><span>{t(locale, "Koláž cesty Švédsko → Praha → Prudký potok. Ne vítězný plakát, ale pracovní mapa chvíle, kdy obrana přestala být jedinou možnou polohou.")}</span></figcaption>
+          </figure>
+        </div>
+        <aside className="unfinishedWorks" aria-label={t(locale, "Nedokončené a satirické práce")}>
+          <strong>{t(locale, "Nedokončené a satirické práce")}</strong>
+          <p>{t(locale, "Intolerance a Na trávě mezi stromy zůstávají pracovními pokusy a materiály k nedokončeným projektům. Hajluje celá rodina je satira na vzestup krajní pravice — ne oslava ani hudební vizitka projektu. Na webu je zmiňuju jako kontext tvorby, bez přehrávače a bez předstírání hotového díla.")}</p>
+        </aside>
+      </section>
+
+      <section id="autor" className="aboutShort">
+        <div className="aboutIdentity">
+          <figure className="authorPhotoLocked">
+            <img src="/gallery/prudky-potok-explicitni-optimized.webp" alt={t(locale, "Malý autoportrét Štěpána Chalupy v Prudkém potoce")} loading="lazy" decoding="async" />
+            <figcaption>{t(locale, "Autoportrét z Prudkého potoka, 2026")}</figcaption>
+          </figure>
+          <div className="aboutBio">
+            <p className="sectionLabel">{t(locale, "Autor a stav projektu")}</p>
+            <h2>Štěpán Chalupa</h2>
+            <p className="aboutLead">{t(locale, "Filmař, režisér, fotograf a autor videoesejí. Zajímá mě, jak společenské systémy prorůstají do práce, času, vztahů a obrazu, který máme o vlastním těle.")}</p>
+            <p>{t(locale, "Vystudoval jsem magisterskou filmovou vědu na Masarykově univerzitě. V práci Punk, hec a esence tvoření jsem zkoumal cesty přerovských filmařů mezi amatérstvím, zakázkou, institucí a vlastní potřebou tvořit. Na stejnou otázku navazuju i prakticky: jak dělat přesnou a ambiciózní audiovizi bez čekání, až mi velká instituce laskavě udělí právo vzít do ruky kameru.")}</p>
+            <p>{t(locale, "Režíroval jsem vzdělávací formát What The Fact? pro Českou televizi, pracoval v Divadle FESTE a pod jménem Fellean tvořím videoeseje, satirické formáty, fotografie a cestovní dokumentární deníky. Můj způsob práce spojuje rešerši a jasnou strukturu s DIY produkcí, improvizací a ochotou nechat do výsledku vstoupit náhodu i člověka před kamerou.")}</p>
+            <p>{t(locale, "Jsem neurodivergentní a senzoricky citlivý. Dlouho pro mě byly dotek, společné šatny, hluk i obyčejné objetí spíš obranný systém než samozřejmá blízkost. Husí kůže proto nevzniká z bezpečné vzdálenosti. Zkouším v ní, jestli lze ukázat zranitelnost a přitom nepřijít o hranice. A jestli se citlivost, která mě někdy izoluje, může proměnit ve filmový jazyk.")}</p>
+            <p>{t(locale, "Nezajímají mě idealizovaná reklamní těla ani jeden gender, věk či typ přitažlivosti. Zajímají mě dospělá lidská těla jako nositelé času: s jizvami, chloupky, vráskami, potem, únavou, slastí, humorem a zkušeností. Do obrazu proto vstupuju i vlastním tělem; nechci po druhých žádat riziko, které sám odmítám nést.")}</p>
+            <div className="authorProof">
+              <span><strong>Mgr.</strong> {t(locale, "filmová věda · MU")}</span>
+              <span><strong>{t(locale, "Režie")}</strong> {t(locale, "Česká televize · What The Fact?")}</span>
+              <span><strong>{t(locale, "Praxe")}</strong> {t(locale, "videoesej · dokument · fotografie")}</span>
+            </div>
+          </div>
+        </div>
+        <div className="contactBox" id="kontakt">
+          <p className="sectionLabel">{t(locale, "Praha · 2026")}</p>
+          <h3>{t(locale, "První setkání je bez kamery, bez závazku a bez přesvědčování.")}</h3>
+          <a href="mailto:stepanchalupa@post.cz?subject=Husí kůže">{t(locale, "Napsat e-mail ↗")}</a>
+          <a href="#formular">{t(locale, "Otevřít nezávazný formulář ↑")}</a>
+        </div>
+      </section>
+
+      <footer className="modernFooter">
+        <a className="brandMark footerBrand" href="#top"><img src="/brand/logo.svg" alt="" /><span>{t(locale, "HUSÍ KŮŽE")}</span></a>
+        <p>© 2026 Štěpán Chalupa · {t(locale, "pracovní koncepce")}</p>
+        <div><a href={pdfHref} target="_blank" rel="noreferrer">PDF ↗</a><a href="#formular">{t(locale, "Formulář ↑")}</a><a href="#texty">{t(locale, "Texty ↑")}</a></div>
+      </footer>
     </main>
   );
 }
