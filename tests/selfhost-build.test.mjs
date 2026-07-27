@@ -16,13 +16,13 @@ test("build provisions private storage without account-specific IDs", async () =
     config.durable_objects?.bindings?.[0]?.class_name,
     "HusiKuzeCms",
   );
-  assert.deepEqual(config.exports ?? {}, {});
-  assert.deepEqual(config.migrations, [
-    {
-      tag: "v1",
-      new_sqlite_classes: ["HusiKuzeCms"],
+  assert.deepEqual(config.exports, {
+    HusiKuzeCms: {
+      type: "durable-object",
+      storage: "sqlite",
     },
-  ]);
+  });
+  assert.deepEqual(config.migrations ?? [], []);
   assert.deepEqual(config.d1_databases ?? [], []);
   assert.deepEqual(config.r2_buckets ?? [], []);
 });
