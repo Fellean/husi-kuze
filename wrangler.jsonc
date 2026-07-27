@@ -19,12 +19,10 @@
       }
     ]
   },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": [
-        "HusiKuzeCms"
-      ]
+  "exports": {
+    "HusiKuzeCms": {
+      "type": "durable-object",
+      "storage": "sqlite"
     }
-  ]
+  }
 }
