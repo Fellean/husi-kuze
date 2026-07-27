@@ -66,6 +66,24 @@ test("automatic translation stays authenticated and server-side", async () => {
   assert.match(editor, /translationError/);
 });
 
+test("route handlers clone internal responses before returning them", async () => {
+  const cmsRoute = await readFile(
+    new URL("app/api/cms/route.ts", root),
+    "utf8",
+  );
+  const mediaRoute = await readFile(
+    new URL("app/api/media/route.ts", root),
+    "utf8",
+  );
+
+  for (const route of [cmsRoute, mediaRoute]) {
+    assert.match(route, /new Response\(response\.body,/);
+    assert.match(route, /headers: new Headers\(response\.headers\)/);
+  }
+  assert.doesNotMatch(cmsRoute, /return await storage\(\)\.fetch/);
+  assert.doesNotMatch(mediaRoute, /return storage\(\)\.fetch/);
+});
+
 test("all three PDFs are packaged with the public website", async () => {
   const files = [
     "dist/client/downloads/husi-kuze-koncepce-cs.pdf",
