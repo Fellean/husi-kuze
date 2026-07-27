@@ -413,7 +413,17 @@ export default function InlineCms({
         patches,
       }),
     });
-    return response.ok;
+    if (response.ok) return true;
+
+    let reason = "";
+    try {
+      const payload = (await response.json()) as { error?: unknown };
+      if (typeof payload.error === "string") reason = payload.error;
+    } catch {
+      reason = `HTTP ${response.status}`;
+    }
+    console.error("CMS save failed.", response.status, reason);
+    return false;
   }
 
   async function translateAndPersist(patches: CmsPatch[]) {
