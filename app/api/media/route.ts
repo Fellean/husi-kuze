@@ -17,6 +17,14 @@ function storage() {
   return namespace.getByName("site");
 }
 
+function mutableResponse(response: Response) {
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: new Headers(response.headers),
+  });
+}
+
 function extension(type: string) {
   if (type === "image/jpeg") return "jpg";
   if (type === "image/png") return "png";
@@ -29,9 +37,10 @@ export async function GET(request: Request) {
   if (!key || !key.startsWith("cms/")) {
     return new Response("Not found.", { status: 404 });
   }
-  return storage().fetch(
+  const response = await storage().fetch(
     `https://cms.internal/media?key=${encodeURIComponent(key)}`,
   );
+  return mutableResponse(response);
 }
 
 export async function POST(request: Request) {
@@ -74,7 +83,7 @@ export async function POST(request: Request) {
     },
     body: await file.arrayBuffer(),
   });
-  if (!response.ok) return response;
+  if (!response.ok) return mutableResponse(response);
 
   return Response.json({
     key: storageKey,

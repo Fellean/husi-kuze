@@ -20,6 +20,14 @@ function storage() {
   return namespace.getByName("site");
 }
 
+function mutableResponse(response: Response) {
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: new Headers(response.headers),
+  });
+}
+
 function validPatch(value: unknown): value is CmsPatch {
   if (!value || typeof value !== "object") return false;
   const patch = value as Record<string, unknown>;
@@ -41,9 +49,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    return await storage().fetch(
+    const response = await storage().fetch(
       `https://cms.internal/patches?locale=${encodeURIComponent(locale)}`,
     );
+    return mutableResponse(response);
   } catch {
     return Response.json(
       { patches: [] },
@@ -77,9 +86,10 @@ export async function PUT(request: Request) {
     return Response.json({ error: "Invalid patch list." }, { status: 400 });
   }
 
-  return storage().fetch("https://cms.internal/patches", {
+  const response = await storage().fetch("https://cms.internal/patches", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ locale, patches }),
   });
+  return mutableResponse(response);
 }
