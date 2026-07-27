@@ -27,8 +27,9 @@ export default async function EditorPage({
         <p>HUSÍ KŮŽE · VLASTNÍ EDITOR</p>
         <h1>Upravuj web tak, jak ho vidíš.</h1>
         <p>
-          Přihlášení i uložené změny běží jen v tvém Cloudflare Workeru.
-          ChatGPT do nich nevidí a ke změnám webu ho nepotřebuješ.
+          Přihlášení i uložené změny běží v tvém Cloudflare Workeru. Když
+          zapneš automatický překlad, odešlou se OpenAI pouze změněné české
+          texty a alty obrázků — ne heslo, obrázky ani zbytek editoru.
         </p>
         <EditorLoginForm returnTo={returnTo} />
         <Link href="/">Zpět na veřejný web</Link>
