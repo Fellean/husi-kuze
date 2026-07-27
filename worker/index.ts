@@ -14,6 +14,7 @@ interface Env {
   ASSETS: Fetcher;
   CMS: DurableObjectNamespace;
   ADMIN_PASSWORD: string;
+  OPENAI_API_KEY?: string;
 }
 
 interface ExecutionContext {

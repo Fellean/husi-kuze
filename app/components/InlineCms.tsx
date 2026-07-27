@@ -26,8 +26,14 @@ const labels = {
     title: "Upravuješ živý web",
     hint: "Klikni do textu a piš. Kliknutím vyber odkaz nebo obrázek.",
     save: "Uložit a zveřejnit",
+    saveWithTranslation: "Uložit + přeložit",
     saving: "Ukládám…",
     saved: "Uloženo. Veřejná verze je aktuální.",
+    translating: "GPT překládá do EN a UA…",
+    translated: "Uloženo a přeloženo do EN i UA.",
+    translationError: "Čeština je uložená, ale překlad selhal.",
+    retryTranslation: "Zkusit překlad znovu",
+    translateToggle: "Po uložení přeložit změny do EN + UA",
     reload: "Zahodit změny",
     selected: "Vybráno",
     link: "Adresa odkazu",
@@ -45,8 +51,14 @@ const labels = {
     title: "You are editing the live website",
     hint: "Click text and type. Click a link or image to select it.",
     save: "Save and publish",
+    saveWithTranslation: "Save + translate",
     saving: "Saving…",
     saved: "Saved. The public version is up to date.",
+    translating: "GPT is translating into EN and UA…",
+    translated: "Saved and translated into EN and UA.",
+    translationError: "Czech was saved, but translation failed.",
+    retryTranslation: "Retry translation",
+    translateToggle: "Translate changes into EN + UA after saving",
     reload: "Discard changes",
     selected: "Selected",
     link: "Link address",
@@ -64,8 +76,14 @@ const labels = {
     title: "Ти редагуєш живий сайт",
     hint: "Натисни на текст і пиши. Натисни на посилання або зображення, щоб вибрати його.",
     save: "Зберегти й опублікувати",
+    saveWithTranslation: "Зберегти + перекласти",
     saving: "Зберігаю…",
     saved: "Збережено. Публічна версія оновлена.",
+    translating: "GPT перекладає англійською та українською…",
+    translated: "Збережено й перекладено англійською та українською.",
+    translationError: "Чеську версію збережено, але переклад не вдався.",
+    retryTranslation: "Повторити переклад",
+    translateToggle: "Після збереження перекласти зміни англійською та українською",
     reload: "Відкинути зміни",
     selected: "Вибрано",
     link: "Адреса посилання",
@@ -194,13 +212,21 @@ export default function InlineCms({
 }) {
   const c = labels[locale];
   const dirty = useRef(new Map<string, CmsPatch>());
+  const translationRetry = useRef<CmsPatch[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const selectedImage = useRef<HTMLImageElement | null>(null);
   const selectedLink = useRef<HTMLAnchorElement | null>(null);
   const [dirtyCount, setDirtyCount] = useState(0);
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
-    "idle",
-  );
+  const [status, setStatus] = useState<
+    | "idle"
+    | "saving"
+    | "saved"
+    | "translating"
+    | "translated"
+    | "translationError"
+    | "error"
+  >("idle");
+  const [autoTranslate, setAutoTranslate] = useState(locale === "cs");
   const [uploading, setUploading] = useState(false);
   const [selected, setSelected] = useState<SelectedElement | null>(null);
   const selectedArticleHref = selected?.href
@@ -378,26 +404,76 @@ export default function InlineCms({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [editable]);
 
-  async function save() {
-    if (dirty.current.size === 0) return;
-    setStatus("saving");
+  async function persistLocale(targetLocale: Locale, patches: CmsPatch[]) {
     const response = await fetch("/api/cms", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        locale,
-        patches: Array.from(dirty.current.values()),
+        locale: targetLocale,
+        patches,
       }),
     });
+    return response.ok;
+  }
 
-    if (!response.ok) {
+  async function translateAndPersist(patches: CmsPatch[]) {
+    const response = await fetch("/api/translate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ patches }),
+    });
+    if (!response.ok) return false;
+
+    const payload = (await response.json()) as {
+      translations?: { en?: CmsPatch[]; uk?: CmsPatch[] };
+    };
+    const en = payload.translations?.en;
+    const uk = payload.translations?.uk;
+    if (!Array.isArray(en) || !Array.isArray(uk)) return false;
+
+    const results = await Promise.all([
+      persistLocale("en", en),
+      persistLocale("uk", uk),
+    ]);
+    return results.every(Boolean);
+  }
+
+  async function retryTranslation() {
+    if (translationRetry.current.length === 0) return;
+    setStatus("translating");
+    if (await translateAndPersist(translationRetry.current)) {
+      translationRetry.current = [];
+      setStatus("translated");
+    } else {
+      setStatus("translationError");
+    }
+  }
+
+  async function save() {
+    if (dirty.current.size === 0) return;
+    setStatus("saving");
+    const patches = Array.from(dirty.current.values());
+    if (!(await persistLocale(locale, patches))) {
       setStatus("error");
       return;
     }
 
     dirty.current.clear();
     setDirtyCount(0);
-    setStatus("saved");
+    if (locale !== "cs" || !autoTranslate) {
+      translationRetry.current = [];
+      setStatus("saved");
+      return;
+    }
+
+    translationRetry.current = patches;
+    setStatus("translating");
+    if (await translateAndPersist(patches)) {
+      translationRetry.current = [];
+      setStatus("translated");
+    } else {
+      setStatus("translationError");
+    }
   }
 
   function updateHref(value: string) {
@@ -454,6 +530,16 @@ export default function InlineCms({
       <div className="cmsToolbarIntro">
         <strong>{c.title}</strong>
         <span>{c.hint}</span>
+        {locale === "cs" && (
+          <label className="cmsAutoTranslate">
+            <input
+              type="checkbox"
+              checked={autoTranslate}
+              onChange={(event) => setAutoTranslate(event.target.checked)}
+            />
+            {c.translateToggle}
+          </label>
+        )}
       </div>
 
       <nav className="cmsLanguages" aria-label="Jazyk upravované stránky">
@@ -537,6 +623,19 @@ export default function InlineCms({
           {dirtyCount === 0 ? c.clean : `${dirtyCount} ${c.dirty}`}
         </span>
         {status === "saved" && <b>{c.saved}</b>}
+        {status === "translating" && <b>{c.translating}</b>}
+        {status === "translated" && <b>{c.translated}</b>}
+        {status === "translationError" && (
+          <>
+            <b className="cmsError">{c.translationError}</b>
+            <button
+              type="button"
+              onClick={() => void retryTranslation()}
+            >
+              {c.retryTranslation}
+            </button>
+          </>
+        )}
         {status === "error" && <b className="cmsError">{c.error}</b>}
         <button
           type="button"
@@ -550,9 +649,19 @@ export default function InlineCms({
           type="button"
           className="cmsSave"
           onClick={() => void save()}
-          disabled={dirtyCount === 0 || status === "saving"}
+          disabled={
+            dirtyCount === 0 ||
+            status === "saving" ||
+            status === "translating"
+          }
         >
-          {status === "saving" ? c.saving : c.save}
+          {status === "saving"
+            ? c.saving
+            : status === "translating"
+              ? c.translating
+              : locale === "cs" && autoTranslate
+                ? c.saveWithTranslation
+                : c.save}
         </button>
         <Link
           className="cmsExit"

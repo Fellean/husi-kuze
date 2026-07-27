@@ -48,6 +48,21 @@
   font-weight: 400;
 }
 
+.cmsAutoTranslate {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cmsAutoTranslate input {
+  margin-top: 2px;
+  accent-color: #c8ff18;
+}
+
 .cmsLanguages {
   display: flex;
   border: 1px solid rgba(255, 255, 255, 0.35);

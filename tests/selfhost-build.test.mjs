@@ -33,9 +33,32 @@ test("server build contains self-hosted editor, auth and storage", async () => {
   assert.match(worker, /HusiKuzeCms/);
   assert.match(worker, /cms_patches/);
   assert.match(worker, /cms_media/);
+  assert.match(worker, /OPENAI_API_KEY/);
+  assert.match(worker, /api\.openai\.com\/v1\/responses/);
+  assert.match(worker, /gpt-5\.6-luna/);
+  assert.match(worker, /husi_kuze_translation_batch/);
   assert.doesNotMatch(worker, /signin-with-chatgpt/);
   assert.doesNotMatch(worker, /oai-authenticated-user/);
   assert.doesNotMatch(worker, /chatgpt\.site/);
+});
+
+test("automatic translation stays authenticated and server-side", async () => {
+  const route = await readFile(
+    new URL("app/api/translate/route.ts", root),
+    "utf8",
+  );
+  const editor = await readFile(
+    new URL("app/components/InlineCms.tsx", root),
+    "utf8",
+  );
+
+  assert.match(route, /isAdminRequest/);
+  assert.match(route, /store:\s*false/);
+  assert.match(route, /json_schema/);
+  assert.match(route, /translatableKinds/);
+  assert.match(editor, /Uložit \+ přeložit/);
+  assert.match(editor, /translateAndPersist/);
+  assert.match(editor, /translationError/);
 });
 
 test("all three PDFs are packaged with the public website", async () => {

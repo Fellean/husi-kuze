@@ -23,6 +23,17 @@ Po prvním nasazení v nastavení Workeru otevři **Variables & Secrets** a při
 runtime secret `ADMIN_PASSWORD`. Hodnota musí mít aspoň 12 znaků. To je heslo,
 kterým se budeš přihlašovat na `/editor`.
 
+Pro automatický překlad přidej ve stejném místě ještě secret
+`OPENAI_API_KEY`. Klíč vytvoříš v OpenAI Platform a jeho použití se účtuje
+zvlášť od předplatného ChatGPT. Editor používá úsporný model
+`gpt-5.6-luna` a do API posílá jen české texty a alty obrázků změněné od
+posledního uložení. Obrázky, heslo ani celý obsah úložiště se neposílají.
+
+V české verzi editoru je překlad ve výchozím stavu zapnutý. Tlačítko
+**Uložit + přeložit** uloží češtinu a vytvoří odpovídající změny v EN a UA.
+Anglickou i ukrajinskou verzi lze potom dál ručně upravit. Když překlad
+selže, česká změna zůstane bezpečně uložená a editor nabídne opakování.
+
 Cloudflare si při prvním deployi samo založí interní SQLite úložiště
 `HusiKuzeCms`. Další push do `main` už jen automaticky aktualizuje web a
 uložený obsah editoru zachová.
@@ -34,5 +45,6 @@ npm ci
 npm test
 ```
 
-Pro lokální editor vytvoř `.dev.vars` s řádkem
-`ADMIN_PASSWORD=lokalni-heslo-alespon-12-znaku` a spusť `npm run dev`.
+Pro lokální editor vytvoř `.dev.vars` s řádky
+`ADMIN_PASSWORD=lokalni-heslo-alespon-12-znaku` a
+`OPENAI_API_KEY=tvuj-api-klic` a spusť `npm run dev`.
