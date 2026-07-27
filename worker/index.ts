@@ -90,19 +90,23 @@ export class HusiKuzeCms extends DurableObject<Env> {
   }
 
   private async patches(request: Request, url: URL) {
+    const storageKey = (locale: string) => `cms-patches:${locale}`;
+
     if (request.method === "GET") {
       const locale = url.searchParams.get("locale") ?? "cs";
       if (!allowedLocales.has(locale)) {
         return json({ error: "Unsupported locale." }, { status: 400 });
       }
 
-      const rows = Array.from(
-        this.ctx.storage.sql.exec<CmsPatch>(
-          "SELECT key, kind, value FROM cms_patches WHERE locale = ? ORDER BY key, kind",
-          locale,
+      const saved =
+        (await this.ctx.storage.get<Record<string, CmsPatch>>(
+          storageKey(locale),
+        )) ?? {};
+      return json({
+        patches: Object.values(saved).sort((a, b) =>
+          `${a.key}:${a.kind}`.localeCompare(`${b.key}:${b.kind}`),
         ),
-      );
-      return json({ patches: rows });
+      });
     }
 
     if (request.method !== "PUT") {
@@ -129,22 +133,14 @@ export class HusiKuzeCms extends DurableObject<Env> {
       return json({ error: "Invalid patch list." }, { status: 400 });
     }
 
+    const key = storageKey(locale);
+    const saved =
+      (await this.ctx.storage.get<Record<string, CmsPatch>>(key)) ?? {};
+    for (const patch of patches) {
+      saved[`${patch.key}\u0000${patch.kind}`] = patch;
+    }
+    await this.ctx.storage.put(key, saved);
     const now = new Date().toISOString();
-    this.ctx.storage.transactionSync(() => {
-      for (const patch of patches) {
-        this.ctx.storage.sql.exec(
-          `INSERT INTO cms_patches (locale, key, kind, value, updated_at)
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(locale, key, kind)
-           DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-          locale,
-          patch.key,
-          patch.kind,
-          patch.value,
-          now,
-        );
-      }
-    });
     return json({ saved: patches.length, updatedAt: now });
   }
 
