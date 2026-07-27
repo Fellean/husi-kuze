@@ -1,0 +1,574 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import type { Locale } from "../i18n";
+
+type PatchKind = "text" | "href" | "src" | "alt";
+
+type CmsPatch = {
+  key: string;
+  kind: PatchKind;
+  value: string;
+};
+
+type SelectedElement = {
+  label: string;
+  textKey?: string;
+  linkKey?: string;
+  href?: string;
+  imageKey?: string;
+  alt?: string;
+};
+
+const labels = {
+  cs: {
+    title: "Upravuješ živý web",
+    hint: "Klikni do textu a piš. Kliknutím vyber odkaz nebo obrázek.",
+    save: "Uložit a zveřejnit",
+    saving: "Ukládám…",
+    saved: "Uloženo. Veřejná verze je aktuální.",
+    reload: "Zahodit změny",
+    selected: "Vybráno",
+    link: "Adresa odkazu",
+    image: "Nahradit obrázek",
+    upload: "Vybrat nový obrázek",
+    uploading: "Nahrávám…",
+    clean: "Zatím žádné změny",
+    dirty: "neuložených změn",
+    error: "Uložení se nepovedlo. Zkus to znovu.",
+    openArticle: "Otevřít článek v editoru",
+    exit: "Konec úprav",
+    logout: "Odhlásit editor",
+  },
+  en: {
+    title: "You are editing the live website",
+    hint: "Click text and type. Click a link or image to select it.",
+    save: "Save and publish",
+    saving: "Saving…",
+    saved: "Saved. The public version is up to date.",
+    reload: "Discard changes",
+    selected: "Selected",
+    link: "Link address",
+    image: "Replace image",
+    upload: "Choose a new image",
+    uploading: "Uploading…",
+    clean: "No changes yet",
+    dirty: "unsaved changes",
+    error: "Saving failed. Please try again.",
+    openArticle: "Open article in editor",
+    exit: "Exit editing",
+    logout: "Sign out",
+  },
+  uk: {
+    title: "Ти редагуєш живий сайт",
+    hint: "Натисни на текст і пиши. Натисни на посилання або зображення, щоб вибрати його.",
+    save: "Зберегти й опублікувати",
+    saving: "Зберігаю…",
+    saved: "Збережено. Публічна версія оновлена.",
+    reload: "Відкинути зміни",
+    selected: "Вибрано",
+    link: "Адреса посилання",
+    image: "Замінити зображення",
+    upload: "Вибрати нове зображення",
+    uploading: "Завантажую…",
+    clean: "Змін поки немає",
+    dirty: "незбережених змін",
+    error: "Не вдалося зберегти. Спробуй ще раз.",
+    openArticle: "Відкрити статтю в редакторі",
+    exit: "Завершити редагування",
+    logout: "Вийти",
+  },
+} as const;
+
+function elementPath(element: Element, root: Element): string {
+  const segments: string[] = [];
+  let current: Element | null = element;
+
+  while (current && current !== root) {
+    const parent: Element | null = current.parentElement;
+    if (!parent) break;
+    const siblings = Array.from(parent.children).filter(
+      (sibling) => sibling.tagName === current?.tagName,
+    );
+    const position = siblings.indexOf(current) + 1;
+    segments.push(`${current.tagName.toLowerCase()}:${position}`);
+    current = parent;
+  }
+
+  return segments.reverse().join(">");
+}
+
+function patchId(key: string, kind: PatchKind): string {
+  return `${kind}::${key}`;
+}
+
+function articleEditorHref(value: string, locale: Locale): string | null {
+  if (!value.startsWith("/")) return null;
+
+  try {
+    const url = new URL(value, "https://site.local");
+    if (!url.pathname.startsWith("/texty/")) return null;
+    url.searchParams.set("edit", "1");
+    if (locale === "cs") {
+      url.searchParams.delete("lang");
+    } else {
+      url.searchParams.set("lang", locale);
+    }
+    return `${url.pathname}?${url.searchParams.toString()}${url.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+function isEditableTextElement(element: Element): element is HTMLElement {
+  if (!(element instanceof HTMLElement)) return false;
+  if (element.closest("[data-cms-ignore]")) return false;
+  if (element.children.length > 0) return false;
+  return Boolean(element.textContent?.trim());
+}
+
+const maxUploadBytes = 1_700_000;
+
+async function canvasBlob(
+  bitmap: ImageBitmap,
+  maxEdge: number,
+  quality: number,
+) {
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Image canvas is unavailable.");
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("Image conversion failed."))),
+      "image/webp",
+      quality,
+    );
+  });
+}
+
+async function prepareImage(file: File) {
+  if (file.size <= maxUploadBytes) return file;
+  if (file.type === "image/gif") {
+    throw new Error("Animated GIF is too large.");
+  }
+
+  const bitmap = await createImageBitmap(file);
+  try {
+    const attempts = [
+      [2400, 0.84],
+      [2000, 0.78],
+      [1700, 0.72],
+      [1400, 0.68],
+    ] as const;
+    let lastBlob: Blob | undefined;
+    for (const [maxEdge, quality] of attempts) {
+      lastBlob = await canvasBlob(bitmap, maxEdge, quality);
+      if (lastBlob.size <= maxUploadBytes) {
+        const baseName = file.name.replace(/\.[^.]+$/, "") || "image";
+        return new File([lastBlob], `${baseName}.webp`, {
+          type: "image/webp",
+        });
+      }
+    }
+    throw new Error(`Image remains too large (${lastBlob?.size ?? 0} bytes).`);
+  } finally {
+    bitmap.close();
+  }
+}
+
+export default function InlineCms({
+  locale,
+  editable,
+  scope,
+  basePath = "/",
+}: {
+  locale: Locale;
+  editable: boolean;
+  scope: string;
+  basePath?: string;
+}) {
+  const c = labels[locale];
+  const dirty = useRef(new Map<string, CmsPatch>());
+  const fileInput = useRef<HTMLInputElement>(null);
+  const selectedImage = useRef<HTMLImageElement | null>(null);
+  const selectedLink = useRef<HTMLAnchorElement | null>(null);
+  const [dirtyCount, setDirtyCount] = useState(0);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
+    "idle",
+  );
+  const [uploading, setUploading] = useState(false);
+  const [selected, setSelected] = useState<SelectedElement | null>(null);
+  const selectedArticleHref = selected?.href
+    ? articleEditorHref(selected.href, locale)
+    : null;
+
+  function remember(patch: CmsPatch) {
+    dirty.current.set(patchId(patch.key, patch.kind), patch);
+    setDirtyCount(dirty.current.size);
+    setStatus("idle");
+  }
+
+  useEffect(() => {
+    const rootElement = document.querySelector("[data-cms-root]");
+    if (!rootElement) return;
+    const root = rootElement;
+
+    let cancelled = false;
+    let cleanupListeners = () => {};
+
+    async function initialize() {
+      const response = await fetch(`/api/cms?locale=${locale}`, {
+        cache: "no-store",
+      });
+      const payload = response.ok
+        ? ((await response.json()) as { patches?: CmsPatch[] })
+        : { patches: [] };
+      if (cancelled) return;
+
+      const patches = new Map(
+        (payload.patches ?? []).map((patch) => [
+          patchId(patch.key, patch.kind),
+          patch,
+        ]),
+      );
+
+      const textSelector =
+        "h1,h2,h3,h4,p,span,strong,small,b,em,blockquote,a,figcaption";
+      const textElements = Array.from(root.querySelectorAll(textSelector)).filter(
+        isEditableTextElement,
+      );
+      const links = Array.from(root.querySelectorAll("a[href]")).filter(
+        (element) => !element.closest("[data-cms-ignore]"),
+      ) as HTMLAnchorElement[];
+      const images = Array.from(root.querySelectorAll("img")).filter(
+        (element) => !element.closest("[data-cms-ignore]"),
+      ) as HTMLImageElement[];
+
+      for (const element of textElements) {
+        const key = `${scope}::${elementPath(element, root)}`;
+        element.dataset.cmsTextKey = key;
+        const patch = patches.get(patchId(key, "text"));
+        if (patch) element.textContent = patch.value;
+        if (editable) {
+          element.contentEditable = "plaintext-only";
+          element.spellcheck = true;
+          element.classList.add("cmsEditableText");
+        }
+      }
+
+      for (const link of links) {
+        const key = `${scope}::${elementPath(link, root)}`;
+        link.dataset.cmsLinkKey = key;
+        const patch = patches.get(patchId(key, "href"));
+        if (patch) link.href = patch.value;
+        if (editable) link.classList.add("cmsEditableLink");
+      }
+
+      for (const image of images) {
+        const key = `${scope}::${elementPath(image, root)}`;
+        image.dataset.cmsImageKey = key;
+        const srcPatch = patches.get(patchId(key, "src"));
+        const altPatch = patches.get(patchId(key, "alt"));
+        if (srcPatch) image.src = srcPatch.value;
+        if (altPatch) image.alt = altPatch.value;
+        if (editable) image.classList.add("cmsEditableImage");
+      }
+
+      if (!editable) return;
+
+      const onInput = (event: Event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const key = target.dataset.cmsTextKey;
+        if (!key) return;
+        remember({ key, kind: "text", value: target.textContent ?? "" });
+      };
+
+      const onClick = (event: Event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+
+        const image = target.closest("img[data-cms-image-key]");
+        if (image instanceof HTMLImageElement) {
+          event.preventDefault();
+          event.stopPropagation();
+          document
+            .querySelectorAll(".cmsSelected")
+            .forEach((element) => element.classList.remove("cmsSelected"));
+          image.classList.add("cmsSelected");
+          selectedImage.current = image;
+          selectedLink.current = null;
+          setSelected({
+            label: image.alt || image.currentSrc.split("/").pop() || "obrázek",
+            imageKey: image.dataset.cmsImageKey,
+            alt: image.alt,
+          });
+          return;
+        }
+
+        const link = target.closest("a[data-cms-link-key]");
+        if (link instanceof HTMLAnchorElement) {
+          event.preventDefault();
+          document
+            .querySelectorAll(".cmsSelected")
+            .forEach((element) => element.classList.remove("cmsSelected"));
+          link.classList.add("cmsSelected");
+          selectedLink.current = link;
+          selectedImage.current = null;
+          setSelected({
+            label: link.textContent?.trim() || link.href,
+            linkKey: link.dataset.cmsLinkKey,
+            href: link.getAttribute("href") ?? "",
+          });
+        }
+      };
+
+      const onFocus = (event: Event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const textKey = target.dataset.cmsTextKey;
+        if (!textKey) return;
+        const link = target.closest("a[data-cms-link-key]");
+        selectedLink.current =
+          link instanceof HTMLAnchorElement ? link : null;
+        selectedImage.current = null;
+        setSelected({
+          label: target.textContent?.trim().slice(0, 80) || target.tagName,
+          textKey,
+          linkKey:
+            link instanceof HTMLAnchorElement
+              ? link.dataset.cmsLinkKey
+              : undefined,
+          href:
+            link instanceof HTMLAnchorElement
+              ? link.getAttribute("href") ?? ""
+              : undefined,
+        });
+      };
+
+      root.addEventListener("input", onInput);
+      root.addEventListener("click", onClick, true);
+      root.addEventListener("focusin", onFocus);
+      cleanupListeners = () => {
+        root.removeEventListener("input", onInput);
+        root.removeEventListener("click", onClick, true);
+        root.removeEventListener("focusin", onFocus);
+      };
+    }
+
+    void initialize();
+    return () => {
+      cancelled = true;
+      cleanupListeners();
+    };
+  }, [editable, locale, scope]);
+
+  useEffect(() => {
+    if (!editable) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (dirty.current.size === 0) return;
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [editable]);
+
+  async function save() {
+    if (dirty.current.size === 0) return;
+    setStatus("saving");
+    const response = await fetch("/api/cms", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        locale,
+        patches: Array.from(dirty.current.values()),
+      }),
+    });
+
+    if (!response.ok) {
+      setStatus("error");
+      return;
+    }
+
+    dirty.current.clear();
+    setDirtyCount(0);
+    setStatus("saved");
+  }
+
+  function updateHref(value: string) {
+    const link = selectedLink.current;
+    const key = selected?.linkKey;
+    if (!link || !key) return;
+    link.setAttribute("href", value);
+    setSelected((current) => (current ? { ...current, href: value } : current));
+    remember({ key, kind: "href", value });
+  }
+
+  function updateAlt(value: string) {
+    const image = selectedImage.current;
+    const key = selected?.imageKey;
+    if (!image || !key) return;
+    image.alt = value;
+    setSelected((current) => (current ? { ...current, alt: value } : current));
+    remember({ key, kind: "alt", value });
+  }
+
+  async function uploadImage(file: File) {
+    const image = selectedImage.current;
+    const key = selected?.imageKey;
+    if (!image || !key) return;
+    setUploading(true);
+
+    try {
+      const prepared = await prepareImage(file);
+      const body = new FormData();
+      body.set("file", prepared);
+      body.set("locale", locale);
+      body.set("key", key);
+
+      const response = await fetch("/api/media", { method: "POST", body });
+      const payload = (await response.json()) as { url?: string };
+      if (!response.ok || !payload.url) {
+        setStatus("error");
+        return;
+      }
+
+      image.src = payload.url;
+      remember({ key, kind: "src", value: payload.url });
+    } catch {
+      setStatus("error");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  if (!editable) return null;
+
+  return (
+    <aside className="cmsToolbar" data-cms-ignore aria-label={c.title}>
+      <div className="cmsToolbarIntro">
+        <strong>{c.title}</strong>
+        <span>{c.hint}</span>
+      </div>
+
+      <nav className="cmsLanguages" aria-label="Jazyk upravované stránky">
+        <Link
+          aria-current={locale === "cs" ? "page" : undefined}
+          href={`${basePath}?edit=1`}
+        >
+          CS
+        </Link>
+        <Link
+          aria-current={locale === "en" ? "page" : undefined}
+          href={`${basePath}?edit=1&lang=en`}
+        >
+          EN
+        </Link>
+        <Link
+          aria-current={locale === "uk" ? "page" : undefined}
+          href={`${basePath}?edit=1&lang=uk`}
+        >
+          UA
+        </Link>
+      </nav>
+
+      {selected && (
+        <div className="cmsSelection">
+          <span>
+            {c.selected}: <strong>{selected.label}</strong>
+          </span>
+          {selected.linkKey && (
+            <>
+              <label>
+                {c.link}
+                <input
+                  type="url"
+                  value={selected.href ?? ""}
+                  onChange={(event) => updateHref(event.target.value)}
+                />
+              </label>
+              {selectedArticleHref && (
+                <Link className="cmsOpen" href={selectedArticleHref}>
+                  {c.openArticle}
+                </Link>
+              )}
+            </>
+          )}
+          {selected.imageKey && (
+            <>
+              <label>
+                Alt
+                <input
+                  type="text"
+                  value={selected.alt ?? ""}
+                  onChange={(event) => updateAlt(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => fileInput.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? c.uploading : c.upload}
+              </button>
+              <input
+                ref={fileInput}
+                hidden
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void uploadImage(file);
+                  event.target.value = "";
+                }}
+              />
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="cmsActions">
+        <span>
+          {dirtyCount === 0 ? c.clean : `${dirtyCount} ${c.dirty}`}
+        </span>
+        {status === "saved" && <b>{c.saved}</b>}
+        {status === "error" && <b className="cmsError">{c.error}</b>}
+        <button
+          type="button"
+          className="cmsDiscard"
+          onClick={() => window.location.reload()}
+          disabled={dirtyCount === 0}
+        >
+          {c.reload}
+        </button>
+        <button
+          type="button"
+          className="cmsSave"
+          onClick={() => void save()}
+          disabled={dirtyCount === 0 || status === "saving"}
+        >
+          {status === "saving" ? c.saving : c.save}
+        </button>
+        <Link
+          className="cmsExit"
+          href={locale === "cs" ? basePath : `${basePath}?lang=${locale}`}
+        >
+          {c.exit}
+        </Link>
+        <a
+          className="cmsExit"
+          href={`/api/auth/logout?returnTo=${encodeURIComponent(
+            locale === "cs" ? basePath : `${basePath}?lang=${locale}`,
+          )}`}
+        >
+          {c.logout}
+        </a>
+      </div>
+    </aside>
+  );
+}

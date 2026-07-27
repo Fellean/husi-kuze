@@ -3,6 +3,8 @@ import AgeGate from "./components/AgeGate";
 import SiteHeader from "./components/SiteHeader";
 import ZoomableImage from "./components/ZoomableImage";
 import ProjectForm from "./components/ProjectForm";
+import InlineCms from "./components/InlineCms";
+import { requireAdminSession } from "./selfhost-auth";
 import siteContent from "./content/site-content.json";
 import { localizeDeep, normalizeLocale, t, withLocale } from "./i18n";
 import { getLocalizedEssays } from "./texty/localized";
@@ -202,7 +204,16 @@ export default async function Home({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const locale = normalizeLocale((await searchParams)?.lang);
+  const params = await searchParams;
+  const locale = normalizeLocale(params?.lang);
+  const editValue = Array.isArray(params?.edit) ? params?.edit[0] : params?.edit;
+  const editable = editValue === "1";
+  const localEditor = process.env.NODE_ENV === "development";
+  if (editable && !localEditor) {
+    const returnTo =
+      locale === "cs" ? "/?edit=1" : `/?edit=1&lang=${locale}`;
+    await requireAdminSession(returnTo);
+  }
   const localizedEssays = getLocalizedEssays(locale);
   const localizedChapters = localizeDeep(projectChapters, locale);
   const localizedGalleryCategories = localizeDeep(siteContent.galleryCategories, locale);
@@ -221,8 +232,9 @@ export default async function Home({
       : "/downloads/husi-kuze-koncepce-cs.pdf";
 
   return (
-    <main className="modernHome">
-      <AgeGate locale={locale} />
+    <main className={editable ? "modernHome cmsEditing" : "modernHome"} data-cms-root>
+      <InlineCms locale={locale} editable={editable} scope="home" />
+      {!editable && <AgeGate locale={locale} />}
       <SiteHeader locale={locale} />
 
       <section id="top" className="modernHero">

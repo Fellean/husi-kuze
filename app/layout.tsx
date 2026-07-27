@@ -4,9 +4,6 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Husí kůže · Portréty doteku",
   description: "Série krátkých filmových portrétů o těle, blízkosti a odvaze nechat se opravdu vidět.",
-  other: {
-    "codex-preview": "development",
-  },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

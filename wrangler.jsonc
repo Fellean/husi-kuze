@@ -1,14 +1,28 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "husi-kuze",
-  "main": "dist/server/index.js",
+  "main": "./worker/index.ts",
   "compatibility_date": "2026-07-27",
-  "compatibility_flags": ["nodejs_compat"],
-  "assets": {
-    "directory": "dist/client",
-    "binding": "ASSETS"
-  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "preview_urls": true,
   "observability": {
     "enabled": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CMS",
+        "class_name": "HusiKuzeCms"
+      }
+    ]
+  },
+  "exports": {
+    "HusiKuzeCms": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
   }
 }
