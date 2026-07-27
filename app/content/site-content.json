@@ -1,0 +1,141 @@
+{
+  "galleryCategories": [
+    {
+      "id": "obrana-identita",
+      "title": "Obrana a identita",
+      "description": "Autoportrét, senzorická citlivost, maska a možnost znovu se nechat vidět.",
+      "images": [
+        {
+          "src": "/gallery/jehelnice-lebka.webp",
+          "alt": "Stylizovaná lebka s očima obklopenýma špendlíky",
+          "title": "Přecitlivělost / obrana",
+          "caption": "Autoportrétní studie senzorického přetížení: ochrana, která se může proměnit v klec."
+        },
+        {
+          "src": "/gallery/lebka-srdce.webp",
+          "alt": "Průsvitná lebka se srdcem a ručně vytvořenýma očima",
+          "title": "Lebka / něha",
+          "caption": "Tělesná konečnost, ruční práce a trochu absurdní srdce tam, kde by podle anatomie být nemělo."
+        },
+        {
+          "src": "/gallery/umlcena-tvar.webp",
+          "alt": "Kresba tváře s očima a ústy překrytými tmavými pásy",
+          "title": "Tvář / umlčení",
+          "caption": "Obraz identity, která je přítomná, ale její smysly a hlas procházejí přes cizí filtry."
+        },
+        {
+          "src": "/gallery/lebka.webp",
+          "alt": "Stylizovaný autoportrét s lebkou",
+          "title": "Obrana / autoportrét",
+          "caption": "Autoportrét o senzorické přecitlivělosti, obraně a těle pod tlakem."
+        },
+        {
+          "src": "/gallery/cerveny-signal-optimized.webp",
+          "alt": "Rozpadlý červený digitální obraz",
+          "title": "Signál / hranice",
+          "caption": "Rozpad obrazu jako hranice mezi viditelností, ochranou a digitálním šumem."
+        },
+        {
+          "src": "/gallery/prudky-potok-explicitni-optimized.webp",
+          "alt": "Malý autoportrét Štěpána Chalupy v horském potoce",
+          "title": "Prudký potok / zranitelnost",
+          "caption": "Autoportrét z ranní studené vody. Na webu zůstává záměrně pouze v malém náhledu.",
+          "protectedPreview": true
+        }
+      ]
+    },
+    {
+      "id": "telo-povrch",
+      "title": "Tělo a povrch",
+      "description": "Haptické obrazy, v nichž se kůže, dřevo, sklo a organická hmota odmítají nechat rychle přečíst.",
+      "images": [
+        {
+          "src": "/gallery/organicka-hmota.webp",
+          "alt": "Extrémní detail mokré tmavé organické hmoty",
+          "title": "Hmota / Umění hoven",
+          "caption": "Povrch, který odmítá být útulný: obrazová poznámka k nečistotě, odporu a generativní uhlazenosti."
+        },
+        {
+          "src": "/gallery/organicky-povrch.webp",
+          "alt": "Mokrý organický povrch v extrémním detailu",
+          "title": "Povrch / tělo jako krajina",
+          "caption": "Studie haptického obrazu: materiál může připomínat kůži, vodu i krajinu zároveň."
+        },
+        {
+          "src": "/gallery/kresba-vrstvy.webp",
+          "alt": "Kresba vrstev těla a krajiny",
+          "title": "Vrstvy / kresba",
+          "caption": "Tělo jako soustava vrstev, stop a linií, ne jako uhlazený objekt."
+        },
+        {
+          "src": "/gallery/sklenene-oko.webp",
+          "alt": "Abstraktní pohled přes zakřivené sklo",
+          "title": "Pohled / deformace",
+          "caption": "Pohled skrze sklo rozbíjí jistotu, co je povrch a co prostor."
+        },
+        {
+          "src": "/gallery/drevo-telo.webp",
+          "alt": "Dřevo a lidské tělo v haptickém detailu",
+          "title": "Hmota / kontakt",
+          "caption": "Dotek člověka a materiálu bez hierarchie mezi tělem a prostředím."
+        },
+        {
+          "src": "/gallery/zlata-mriz.webp",
+          "alt": "Zlatý povrch rozdělený organickou mříží",
+          "title": "Mříž / kůže",
+          "caption": "Organická struktura mezi ochrannou vrstvou, jizvou a ornamentem."
+        },
+        {
+          "src": "/gallery/temny-lustr.webp",
+          "alt": "Temný lustr překrytý organickou strukturou",
+          "title": "Tma / slast",
+          "caption": "Světlo je tu tělesný vjem, ne jen technický způsob osvětlení."
+        }
+      ]
+    },
+    {
+      "id": "system-krajina",
+      "title": "Systém a krajina",
+      "description": "Město, instituce, infrastruktura a místa, která tělo nesou i třídí.",
+      "images": [
+        {
+          "src": "/gallery/brutalistni-okulus.webp",
+          "alt": "Zelený kruhový průhled v temné brutalistní konstrukci",
+          "title": "Okulus / systém",
+          "caption": "Pohled skrze infrastrukturu: technologie jako možnost průchodu i nástroj kontroly."
+        },
+        {
+          "src": "/gallery/konstruktivisticka-vez.webp",
+          "alt": "Ocelová konstrukce věže viděná zevnitř",
+          "title": "Konstrukce / instituce",
+          "caption": "Pevný aparát může nést, chránit i rozhodovat, kdo vůbec smí stoupat vzhůru."
+        },
+        {
+          "src": "/gallery/ty-to-zvladnes-rukopis.webp",
+          "alt": "Ručně psaný nápis Ty to zvládneš",
+          "title": "Povzbuzení / stopa",
+          "caption": "Cizí věta ve veřejném prostoru jako malý nevyžádaný akt péče."
+        },
+        {
+          "src": "/gallery/levitujici-list.webp",
+          "alt": "List zavěšený v temném prostoru",
+          "title": "Lehkost / napětí",
+          "caption": "Křehký objekt mezi klidem a pádem; obrazová poznámka k důvěře."
+        },
+        {
+          "src": "/gallery/praha.webp",
+          "alt": "Pražská městská struktura viděná šikmou perspektivou",
+          "title": "Praha / přesun",
+          "caption": "Město viděné přes nejistou perspektivu a čerstvou zkušenost stěhování."
+        },
+        {
+          "src": "/gallery/zimni-les.webp",
+          "alt": "Zimní les jako tělesná a paměťová krajina",
+          "title": "Chlad / paměť",
+          "caption": "Les jako tělesná paměť chladu, vzdálenosti a návratu."
+        }
+      ]
+    }
+  ],
+  "customArticles": []
+}

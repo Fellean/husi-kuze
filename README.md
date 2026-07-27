@@ -1,39 +1,68 @@
 # Husí kůže
 
-Veřejný web nezávislého autorského projektu Štěpána Chalupy.
+Veřejný web autorského projektu Štěpána Chalupy. Produkční web běží jako
+Cloudflare Worker a jeho zdroj je tento repozitář.
 
-## Úprava článků bez kódu
+## Vizuální editor
 
-1. Otevři https://app.pagescms.org a přihlas se přes GitHub.
-2. Nainstaluj Pages CMS pro repozitář `Fellean/husi-kuze`.
-3. Otevři sekci **Články a makrostudie**.
-4. Uprav nebo přidej text, obraz a zdroje a změnu ulož.
+Ve Windows spusť dvojklikem `START_EDITOR.bat`. Otevře se lokální editor na
+`http://127.0.0.1:8765`.
 
-Pages CMS zapisuje obsah do `content/essays.json`. Cloudflare po každé uložené
-změně web automaticky znovu sestaví.
+Editor je vizuální:
 
-## Bezplatné nasazení na Cloudflare Pages
+- kliknutím upravíš názvy, popisky a text článku přímo v náhledu,
+- tažením změníš pořadí kategorií, fotek, článků a kapitol,
+- obrázek přidáš běžným výběrem souboru,
+- `Uložit rozepsané` zapíše změnu jen do počítače,
+- `Uložit a publikovat` vytvoří Git commit a odešle jej na GitHub.
 
-V Cloudflare vyber **Workers & Pages → Create → Pages → Connect to Git** a
-repozitář `Fellean/husi-kuze`. Nastav:
+Editor běží pouze na `127.0.0.1`, není součástí veřejného webu a neukládá
+žádné heslo ani GitHub token. Pro publikování musí být počítač jednou
+přihlášený ke GitHubu, nejjednodušeji přes GitHub Desktop.
 
-- Framework preset: `None`
+## Automatické nasazení na stávající Cloudflare Worker
+
+V Cloudflare otevři Worker `husi-kuze` a v `Settings → Builds` připoj
+repozitář `Fellean/husi-kuze`. Nastavení:
+
+- Production branch: `main`
 - Build command: `npm run build`
-- Build output directory: `dist/client`
+- Deploy command: `npm run deploy:worker`
 - Root directory: `/`
 - Node.js: 22
 
-Po prvním sestavení dostane web adresu ve tvaru `husi-kuze.pages.dev`.
+Od té chvíle každý push do `main` automaticky vytvoří a nasadí novou verzi na
+stávající adresu Workeru. Není potřeba ručně nahrávat ZIP ani kopírovat HTML.
 
-## Lokální spuštění
+## Vlastní doména
+
+Adresa `husi-kuze.felleanuvpruvodce.workers.dev` obsahuje název Workeru a
+Cloudflare účetní subdoménu. Druhou část nelze u `workers.dev` skrýt.
+
+Pro čistou adresu je potřeba koupit `husikuze.com`, přidat ji jako aktivní
+Cloudflare zónu a u Workeru otevřít:
+
+`Settings → Domains & Routes → Add → Custom Domain`
+
+Jako doménu zadej `husikuze.com`. Pro `www.husikuze.com` je vhodné přidat
+přesměrování na kořenovou doménu.
+
+## Lokální vývoj
 
 ```bash
 npm install
 npm run dev
 ```
 
-Produkční kontrola:
+Kontroly:
 
 ```bash
-npm run build
+npm run lint
+npm test
+```
+
+Ruční nasazení:
+
+```bash
+npm run deploy
 ```

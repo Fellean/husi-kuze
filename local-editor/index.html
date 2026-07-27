@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Husí kůže · vizuální editor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#galleryPanel" aria-label="Husí kůže">
+        <span>FOOTAGE:</span>
+        <strong>Husí kůže</strong>
+        <small>vizuální editor</small>
+      </a>
+      <div class="topActions">
+        <span id="saveState" class="saveState">Načítám web…</span>
+        <button id="saveLocal" class="button quiet" disabled>Uložit rozepsané</button>
+        <button id="publish" class="button pink" disabled>Uložit a publikovat</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Klikni do textu a normálně piš</p>
+          <h1>Tohle už je editor, ne daňové přiznání.</h1>
+          <p>Změny vidíš přibližně tak, jak se objeví na webu. Tažením přesouváš kategorie, fotky i články. Růžové tlačítko změny odešle na GitHub; napojený Cloudflare je potom sám nasadí.</p>
+        </div>
+        <aside class="gitStatus">
+          <span>Git + Cloudflare</span>
+          <strong id="branchName">zjišťuju větev…</strong>
+          <p id="gitMessage">Editor běží jen na tvém počítači. Přístupové údaje se neukládají do webu.</p>
+        </aside>
+      </section>
+
+      <nav class="tabs" aria-label="Část editoru">
+        <button class="tab active" data-tab="gallery">Galerie</button>
+        <button class="tab" data-tab="articles">Články</button>
+        <button class="tab" data-tab="help">Jak publikování funguje</button>
+      </nav>
+
+      <section id="galleryPanel" class="panel active">
+        <header class="panelHead">
+          <div>
+            <p class="eyebrow">Náhled galerie</p>
+            <h2>Obrazový atlas</h2>
+          </div>
+          <div class="panelActions">
+            <label class="button quiet fileButton">Přidat fotky<input id="globalImagePicker" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" multiple /></label>
+            <button id="addCategory" class="button navy">Přidat kategorii</button>
+          </div>
+        </header>
+        <p class="hint">Text s tečkovaným podtržením je editovatelný. Fotku chyť za horní proužek a přesuň. Kliknutí na fotku otevře její popisek a alternativní text.</p>
+        <div id="categories" class="categoryList"></div>
+      </section>
+
+      <section id="articlesPanel" class="panel">
+        <header class="panelHead">
+          <div>
+            <p class="eyebrow">Texty v reálné hierarchii</p>
+            <h2>Články</h2>
+          </div>
+          <button id="addArticle" class="button navy">Napsat nový článek</button>
+        </header>
+        <p class="hint">Klikni na kartu a text se otevře v čistém vizuálním plátně. Nadpisy a odstavce upravuješ přímo, bez Markdownu a bez HTML zaklínadel.</p>
+        <div class="articleWorkspace">
+          <aside id="articleList" class="articleList"></aside>
+          <div id="articleCanvas" class="articleCanvas empty">
+            <p>Vyber článek vlevo nebo založ nový.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="helpPanel" class="panel">
+        <div class="helpHero">
+          <p class="eyebrow">Jednou nastavit, potom jen klikat</p>
+          <h2>Editor → GitHub → Cloudflare → web</h2>
+          <p>Tlačítko „Uložit a publikovat“ zapíše obsah do projektu, vytvoří Git commit a odešle jej do repozitáře. Cloudflare sleduje GitHub a po každé změně sestaví novou verzi webu.</p>
+        </div>
+        <div class="helpGrid">
+          <article><span>01</span><h3>První přihlášení</h3><p>V počítači musí být Git a přihlášení k GitHubu. Nejsnazší je jednou otevřít repozitář v GitHub Desktopu.</p></article>
+          <article><span>02</span><h3>Úprava</h3><p>Spusť <code>START_EDITOR.bat</code>, klikni do textu, přidej obrázek nebo přesuň kartu.</p></article>
+          <article><span>03</span><h3>Publikace</h3><p>Růžové tlačítko udělá commit a push. Heslo ani token editor nezná; použije bezpečné přihlášení Gitu v počítači.</p></article>
+          <article><span>04</span><h3>Nasazení</h3><p>Cloudflare automaticky sestaví větev nastavenou jako Production branch. Pro ostrý web to má být <code>main</code>.</p></article>
+        </div>
+      </section>
+    </main>
+
+    <template id="categoryTemplate">
+      <article class="categoryCard" draggable="true">
+        <div class="dragBar"><span>↕ Přesunout kategorii</span><button class="iconButton deleteCategory" title="Smazat kategorii">×</button></div>
+        <header>
+          <h3 class="editable categoryTitle" contenteditable="true" spellcheck="true"></h3>
+          <p class="editable categoryDescription" contenteditable="true" spellcheck="true"></p>
+        </header>
+        <div class="imageGrid"></div>
+        <label class="addIntoCategory">+ Přidat fotky do této kategorie<input class="imagePicker" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" multiple /></label>
+      </article>
+    </template>
+
+    <template id="imageTemplate">
+      <figure class="imageCard" draggable="true">
+        <div class="imageDrag">↔</div>
+        <img alt="" />
+        <figcaption>
+          <strong class="editable imageTitle" contenteditable="true" spellcheck="true"></strong>
+          <span class="editable imageCaption" contenteditable="true" spellcheck="true"></span>
+          <details>
+            <summary>Přístupnost a nastavení</summary>
+            <label>Alternativní text<textarea class="imageAlt" rows="3"></textarea></label>
+            <label class="checkbox"><input class="protectedPreview" type="checkbox" /> Zobrazit jen chráněný malý náhled</label>
+            <button class="deleteImage danger">Smazat fotku z webu</button>
+          </details>
+        </figcaption>
+      </figure>
+    </template>
+
+    <template id="articleListTemplate">
+      <button class="articleListItem" draggable="true">
+        <span class="articleNo"></span>
+        <span><small class="articleKicker"></small><strong class="articleTitle"></strong></span>
+        <i>↕</i>
+      </button>
+    </template>
+
+    <template id="articleCanvasTemplate">
+      <article class="articlePreview">
+        <header class="articleHero">
+          <div>
+            <p class="editable previewKicker eyebrow" contenteditable="true" spellcheck="true"></p>
+            <h1 class="editable previewTitle" contenteditable="true" spellcheck="true"></h1>
+            <p class="editable previewDek" contenteditable="true" spellcheck="true"></p>
+            <div class="articleMeta"><span class="editable previewDate" contenteditable="true" spellcheck="true"></span><span>Štěpán Chalupa</span></div>
+          </div>
+          <label class="coverPicker">
+            <img class="previewCover" alt="" />
+            <span>Změnit obálku</span>
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" />
+          </label>
+        </header>
+        <section class="thesisPreview"><span>Teze</span><p class="editable previewThesis" contenteditable="true" spellcheck="true"></p></section>
+        <div class="sectionList"></div>
+        <div class="articleBottomActions">
+          <button class="addSection button quiet">+ Přidat kapitolu</button>
+          <button class="deleteArticle button danger">Smazat celý článek</button>
+        </div>
+      </article>
+    </template>
+
+    <template id="sectionTemplate">
+      <section class="sectionPreview" draggable="true">
+        <div class="sectionNo"></div>
+        <div>
+          <h2 class="editable sectionTitle" contenteditable="true" spellcheck="true"></h2>
+          <div class="paragraphList"></div>
+          <div class="sectionActions">
+            <button class="addParagraph">+ odstavec</button>
+            <button class="moveSection">↕ přesunout kapitolu</button>
+            <button class="deleteSection">× smazat kapitolu</button>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <template id="paragraphTemplate">
+      <div class="paragraphRow">
+        <p class="editable paragraph" contenteditable="true" spellcheck="true"></p>
+        <button class="deleteParagraph" title="Smazat odstavec">×</button>
+      </div>
+    </template>
+
+    <dialog id="newArticleDialog">
+      <form method="dialog">
+        <p class="eyebrow">Nový článek</p>
+        <h2>Začni názvem. Zbytek dopíšeš rovnou v náhledu.</h2>
+        <label>Název článku<input id="newArticleTitle" autocomplete="off" /></label>
+        <div><button value="cancel" class="button quiet">Zrušit</button><button id="confirmArticle" value="default" class="button pink">Vytvořit</button></div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
