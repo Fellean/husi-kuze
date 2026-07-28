@@ -9,6 +9,10 @@ import type {
 import type { Locale } from "../i18n";
 
 type Tab = "categories" | "articles" | "buttons";
+export type CmsBaseCategory = {
+  id: string;
+  title: string;
+};
 
 const copy = {
   cs: {
@@ -22,6 +26,13 @@ const copy = {
     addButton: "Přidat tlačítko",
     addImages: "Přidat fotky",
     replaceImage: "Vyměnit obrázek",
+    save: "Uložit změny",
+    cancel: "Zrušit",
+    moveUp: "Posunout nahoru",
+    moveDown: "Posunout dolů",
+    builtIn: "Původní kategorie",
+    builtInNote: "Obsah upravíš kliknutím přímo na webu. Tady měníš její pořadí.",
+    unsaved: "Zahodit neuložené změny?",
     delete: "Smazat",
     close: "Zavřít",
     emptyCategories: "Zatím tu není žádná nová kategorie.",
@@ -40,6 +51,13 @@ const copy = {
     addButton: "Add button",
     addImages: "Add images",
     replaceImage: "Replace image",
+    save: "Save changes",
+    cancel: "Cancel",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    builtIn: "Original category",
+    builtInNote: "Edit its content directly on the website. Change its order here.",
+    unsaved: "Discard unsaved changes?",
     delete: "Delete",
     close: "Close",
     emptyCategories: "No new category yet.",
@@ -58,6 +76,13 @@ const copy = {
     addButton: "Додати кнопку",
     addImages: "Додати зображення",
     replaceImage: "Замінити зображення",
+    save: "Зберегти зміни",
+    cancel: "Скасувати",
+    moveUp: "Перемістити вгору",
+    moveDown: "Перемістити вниз",
+    builtIn: "Оригінальна категорія",
+    builtInNote: "Редагуй вміст безпосередньо на сайті. Тут можна змінити порядок.",
+    unsaved: "Відкинути незбережені зміни?",
     delete: "Видалити",
     close: "Закрити",
     emptyCategories: "Нових категорій поки немає.",
@@ -68,7 +93,10 @@ const copy = {
 } as const;
 
 function id() {
-  return crypto.randomUUID();
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `cms-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
 }
 
 function slugify(value: string) {
@@ -160,13 +188,15 @@ function parseSources(
 export default function CmsContentManager({
   locale,
   content,
-  onChange,
+  baseCategories,
+  onSave,
   onClose,
   upload,
 }: {
   locale: Locale;
   content: CmsContent;
-  onChange: (content: CmsContent) => void;
+  baseCategories: CmsBaseCategory[];
+  onSave: (content: CmsContent) => void;
   onClose: () => void;
   upload: (file: File, key: string) => Promise<string>;
 }) {
@@ -174,11 +204,54 @@ export default function CmsContentManager({
   const [tab, setTab] = useState<Tab>("categories");
   const [uploading, setUploading] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [draft, setDraft] = useState<CmsContent>(() =>
+    structuredClone(content),
+  );
+  const [changed, setChanged] = useState(false);
 
   function change(mutator: (draft: CmsContent) => void) {
-    const draft = structuredClone(content);
-    mutator(draft);
-    onChange(draft);
+    setDraft((current) => {
+      const next = structuredClone(current);
+      mutator(next);
+      return next;
+    });
+    setChanged(true);
+  }
+
+  function close() {
+    if (changed && !confirm(c.unsaved)) return;
+    onClose();
+  }
+
+  function saveAndClose() {
+    onSave(draft);
+    onClose();
+  }
+
+  function moveItem<T>(items: T[], from: number, to: number) {
+    if (to < 0 || to >= items.length || from === to) return;
+    const [item] = items.splice(from, 1);
+    items.splice(to, 0, item);
+  }
+
+  function orderedCategoryIds(current: CmsContent) {
+    const available = [
+      ...baseCategories.map((category) => category.id),
+      ...current.categories.map((category) => category.id),
+    ];
+    const saved = (current.categoryOrder ?? []).filter((categoryId) =>
+      available.includes(categoryId),
+    );
+    return [...saved, ...available.filter((categoryId) => !saved.includes(categoryId))];
+  }
+
+  function moveCategory(categoryId: string, direction: -1 | 1) {
+    change((current) => {
+      const order = orderedCategoryIds(current);
+      const index = order.indexOf(categoryId);
+      moveItem(order, index, index + direction);
+      current.categoryOrder = order;
+    });
   }
 
   async function uploadFiles(
@@ -205,14 +278,26 @@ export default function CmsContentManager({
   }
 
   function addCategory() {
-    change((draft) => {
-      const count = draft.categories.length + 1;
-      draft.categories.push({
-        id: id(),
+    change((current) => {
+      const count = current.categories.length + 1;
+      const categoryId = id();
+      current.categories.push({
+        id: categoryId,
         title: `Nová kategorie ${count}`,
         description: "",
         images: [],
+        layout: "strip",
+        frame: "line",
+        imageFit: "cover",
+        imageRatio: "landscape",
+        columns: 3,
+        backgroundColor: "#f2eee7",
+        textColor: "#111820",
+        accentColor: "#ed2859",
       });
+      current.categoryOrder = [...orderedCategoryIds(current), categoryId].filter(
+        (value, index, all) => all.indexOf(value) === index,
+      );
     });
   }
 
@@ -258,15 +343,29 @@ export default function CmsContentManager({
         location: "hero",
         style: "strong",
         target: "new",
+        frame: "none",
+        shape: "square",
+        width: "auto",
+        backgroundColor: "#ed2859",
+        textColor: "#ffffff",
+        borderColor: "#ed2859",
       });
     });
   }
+
+  const baseById = new Map(
+    baseCategories.map((category) => [category.id, category]),
+  );
+  const customById = new Map(
+    draft.categories.map((category) => [category.id, category]),
+  );
+  const categoryOrder = orderedCategoryIds(draft);
 
   return (
     <div
       className="cmsManagerBackdrop"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) close();
       }}
     >
       <section
@@ -281,7 +380,7 @@ export default function CmsContentManager({
             <h2 id="cms-manager-title">{c.title}</h2>
             <p>{c.lead}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label={c.close}>
+          <button type="button" onClick={close} aria-label={c.close}>
             ×
           </button>
         </header>
@@ -303,10 +402,10 @@ export default function CmsContentManager({
               {label}
               <b>
                 {value === "categories"
-                  ? content.categories.length
+                  ? categoryOrder.length
                   : value === "articles"
-                    ? content.articles.length
-                    : content.buttons.length}
+                    ? draft.articles.length
+                    : draft.buttons.length}
               </b>
             </button>
           ))}
@@ -323,10 +422,51 @@ export default function CmsContentManager({
             >
               + {c.addCategory}
             </button>
-            {content.categories.length === 0 && (
+            <div className="cmsOrderList" aria-label={c.categories}>
+              {categoryOrder.map((categoryId, categoryIndex) => {
+                const baseCategory = baseById.get(categoryId);
+                const customCategory = customById.get(categoryId);
+                return (
+                  <div key={categoryId}>
+                    <span>
+                      <b>{String(categoryIndex + 1).padStart(2, "0")}</b>
+                      <strong>
+                        {baseCategory?.title ??
+                          customCategory?.title ??
+                          categoryId}
+                      </strong>
+                      <small>
+                        {baseCategory ? c.builtIn : c.categories}
+                      </small>
+                    </span>
+                    <div className="cmsMoveButtons">
+                      <button
+                        type="button"
+                        onClick={() => moveCategory(categoryId, -1)}
+                        disabled={categoryIndex === 0}
+                        aria-label={c.moveUp}
+                        title={c.moveUp}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveCategory(categoryId, 1)}
+                        disabled={categoryIndex === categoryOrder.length - 1}
+                        aria-label={c.moveDown}
+                        title={c.moveDown}
+                      >
+                        ↓
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {draft.categories.length === 0 && (
               <p className="cmsManagerEmpty">{c.emptyCategories}</p>
             )}
-            {content.categories.map((category, categoryIndex) => (
+            {draft.categories.map((category, categoryIndex) => (
               <article className="cmsManagerCard" key={category.id}>
                 <header>
                   <strong>{String(categoryIndex + 1).padStart(2, "0")}</strong>
@@ -343,6 +483,9 @@ export default function CmsContentManager({
                       }
                       change((draft) => {
                         draft.categories.splice(categoryIndex, 1);
+                        draft.categoryOrder = orderedCategoryIds(draft).filter(
+                          (categoryId) => categoryId !== category.id,
+                        );
                       });
                     }}
                   >
@@ -375,6 +518,129 @@ export default function CmsContentManager({
                       }
                     />
                   </label>
+                  <label>
+                    Rozložení
+                    <select
+                      value={category.layout ?? "strip"}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.categories[categoryIndex].layout = event.target
+                            .value as typeof category.layout;
+                        })
+                      }
+                    >
+                      <option value="strip">Vodorovný pás</option>
+                      <option value="grid">Mřížka</option>
+                      <option value="feature">První obraz dominantní</option>
+                    </select>
+                  </label>
+                  <label>
+                    Rámování sekce
+                    <select
+                      value={category.frame ?? "line"}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.categories[categoryIndex].frame = event.target
+                            .value as typeof category.frame;
+                        })
+                      }
+                    >
+                      <option value="none">Bez rámu</option>
+                      <option value="line">Tenká linka</option>
+                      <option value="heavy">Silný rám</option>
+                      <option value="shadow">Rám + stín</option>
+                    </select>
+                  </label>
+                  <label>
+                    Poměr obrázků
+                    <select
+                      value={category.imageRatio ?? "landscape"}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.categories[categoryIndex].imageRatio = event
+                            .target.value as typeof category.imageRatio;
+                        })
+                      }
+                    >
+                      <option value="landscape">Na šířku</option>
+                      <option value="square">Čtverec</option>
+                      <option value="portrait">Na výšku</option>
+                    </select>
+                  </label>
+                  <label>
+                    Ořez obrázků
+                    <select
+                      value={category.imageFit ?? "cover"}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.categories[categoryIndex].imageFit = event.target
+                            .value as typeof category.imageFit;
+                        })
+                      }
+                    >
+                      <option value="cover">Vyplnit rám a oříznout</option>
+                      <option value="contain">Ukázat celý obrázek</option>
+                    </select>
+                  </label>
+                  <label>
+                    Sloupce v mřížce
+                    <select
+                      value={category.columns ?? 3}
+                      disabled={(category.layout ?? "strip") !== "grid"}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.categories[categoryIndex].columns = Number(
+                            event.target.value,
+                          ) as typeof category.columns;
+                        })
+                      }
+                    >
+                      <option value="2">2 sloupce</option>
+                      <option value="3">3 sloupce</option>
+                      <option value="4">4 sloupce</option>
+                    </select>
+                  </label>
+                  <div className="cmsColorFields wide">
+                    <label>
+                      Barva pozadí
+                      <input
+                        type="color"
+                        value={category.backgroundColor ?? "#f2eee7"}
+                        onChange={(event) =>
+                          change((draft) => {
+                            draft.categories[categoryIndex].backgroundColor =
+                              event.target.value;
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Barva textu
+                      <input
+                        type="color"
+                        value={category.textColor ?? "#111820"}
+                        onChange={(event) =>
+                          change((draft) => {
+                            draft.categories[categoryIndex].textColor =
+                              event.target.value;
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Barva akcentu
+                      <input
+                        type="color"
+                        value={category.accentColor ?? "#ed2859"}
+                        onChange={(event) =>
+                          change((draft) => {
+                            draft.categories[categoryIndex].accentColor =
+                              event.target.value;
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
                 </div>
                 <label className="cmsManagerUpload">
                   {uploading === `category:${category.id}`
@@ -453,20 +719,58 @@ export default function CmsContentManager({
                           />
                         </label>
                       </div>
-                      <button
-                        type="button"
-                        className="danger"
-                        onClick={() =>
-                          change((draft) => {
-                            draft.categories[categoryIndex].images.splice(
-                              imageIndex,
-                              1,
-                            );
-                          })
-                        }
-                      >
-                        ×
-                      </button>
+                      <div className="cmsImageActions">
+                        <div className="cmsMoveButtons">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              change((draft) => {
+                                moveItem(
+                                  draft.categories[categoryIndex].images,
+                                  imageIndex,
+                                  imageIndex - 1,
+                                );
+                              })
+                            }
+                            disabled={imageIndex === 0}
+                            aria-label={c.moveUp}
+                            title={c.moveUp}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              change((draft) => {
+                                moveItem(
+                                  draft.categories[categoryIndex].images,
+                                  imageIndex,
+                                  imageIndex + 1,
+                                );
+                              })
+                            }
+                            disabled={imageIndex === category.images.length - 1}
+                            aria-label={c.moveDown}
+                            title={c.moveDown}
+                          >
+                            ↓
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          className="danger"
+                          onClick={() =>
+                            change((draft) => {
+                              draft.categories[categoryIndex].images.splice(
+                                imageIndex,
+                                1,
+                              );
+                            })
+                          }
+                        >
+                          {c.delete}
+                        </button>
+                      </div>
                     </section>
                   ))}
                 </div>
@@ -484,13 +788,49 @@ export default function CmsContentManager({
             >
               + {c.addArticle}
             </button>
-            {content.articles.length === 0 && (
+            {draft.articles.length === 0 && (
               <p className="cmsManagerEmpty">{c.emptyArticles}</p>
             )}
-            {content.articles.map((article, articleIndex) => (
+            {draft.articles.map((article, articleIndex) => (
               <article className="cmsManagerCard" key={article.id}>
                 <header>
                   <strong>{String(articleIndex + 1).padStart(2, "0")}</strong>
+                  <div className="cmsMoveButtons">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        change((draft) => {
+                          moveItem(
+                            draft.articles,
+                            articleIndex,
+                            articleIndex - 1,
+                          );
+                        })
+                      }
+                      disabled={articleIndex === 0}
+                      aria-label={c.moveUp}
+                      title={c.moveUp}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        change((draft) => {
+                          moveItem(
+                            draft.articles,
+                            articleIndex,
+                            articleIndex + 1,
+                          );
+                        })
+                      }
+                      disabled={articleIndex === draft.articles.length - 1}
+                      aria-label={c.moveDown}
+                      title={c.moveDown}
+                    >
+                      ↓
+                    </button>
+                  </div>
                   <a
                     href={`/texty/${article.slug}?edit=1${
                       locale === "cs" ? "" : `&lang=${locale}`
@@ -694,13 +1034,49 @@ export default function CmsContentManager({
             >
               + {c.addButton}
             </button>
-            {content.buttons.length === 0 && (
+            {draft.buttons.length === 0 && (
               <p className="cmsManagerEmpty">{c.emptyButtons}</p>
             )}
-            {content.buttons.map((button, buttonIndex) => (
+            {draft.buttons.map((button, buttonIndex) => (
               <article className="cmsManagerCard" key={button.id}>
                 <header>
                   <strong>{String(buttonIndex + 1).padStart(2, "0")}</strong>
+                  <div className="cmsMoveButtons">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        change((draft) => {
+                          moveItem(
+                            draft.buttons,
+                            buttonIndex,
+                            buttonIndex - 1,
+                          );
+                        })
+                      }
+                      disabled={buttonIndex === 0}
+                      aria-label={c.moveUp}
+                      title={c.moveUp}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        change((draft) => {
+                          moveItem(
+                            draft.buttons,
+                            buttonIndex,
+                            buttonIndex + 1,
+                          );
+                        })
+                      }
+                      disabled={buttonIndex === draft.buttons.length - 1}
+                      aria-label={c.moveDown}
+                      title={c.moveDown}
+                    >
+                      ↓
+                    </button>
+                  </div>
                   <button
                     type="button"
                     className="danger"
@@ -784,11 +1160,126 @@ export default function CmsContentManager({
                       <option value="same">Stejná karta</option>
                     </select>
                   </label>
+                  <label>
+                    Rámování
+                    <select
+                      value={button.frame ?? "none"}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.buttons[buttonIndex].frame = event.target
+                            .value as typeof button.frame;
+                        })
+                      }
+                    >
+                      <option value="none">Bez rámu</option>
+                      <option value="line">Tenká linka</option>
+                      <option value="heavy">Silný rám</option>
+                      <option value="shadow">Rám + stín</option>
+                    </select>
+                  </label>
+                  <label>
+                    Tvar
+                    <select
+                      value={button.shape ?? "square"}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.buttons[buttonIndex].shape = event.target
+                            .value as typeof button.shape;
+                        })
+                      }
+                    >
+                      <option value="square">Hranaté</option>
+                      <option value="soft">Jemně zakulacené</option>
+                      <option value="pill">Pilulka</option>
+                    </select>
+                  </label>
+                  <label>
+                    Šířka
+                    <select
+                      value={button.width ?? "auto"}
+                      onChange={(event) =>
+                        change((draft) => {
+                          draft.buttons[buttonIndex].width = event.target
+                            .value as typeof button.width;
+                        })
+                      }
+                    >
+                      <option value="auto">Podle textu</option>
+                      <option value="full">Celá šířka</option>
+                    </select>
+                  </label>
+                  <div className="cmsColorFields wide">
+                    <label>
+                      Barva tlačítka
+                      <input
+                        type="color"
+                        value={button.backgroundColor ?? "#ed2859"}
+                        onChange={(event) =>
+                          change((draft) => {
+                            draft.buttons[buttonIndex].backgroundColor =
+                              event.target.value;
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Barva textu
+                      <input
+                        type="color"
+                        value={button.textColor ?? "#ffffff"}
+                        onChange={(event) =>
+                          change((draft) => {
+                            draft.buttons[buttonIndex].textColor =
+                              event.target.value;
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Barva rámu
+                      <input
+                        type="color"
+                        value={button.borderColor ?? "#ed2859"}
+                        onChange={(event) =>
+                          change((draft) => {
+                            draft.buttons[buttonIndex].borderColor =
+                              event.target.value;
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
                 </div>
               </article>
             ))}
           </div>
         )}
+        <footer className="cmsManagerFooter">
+          <span>
+            {changed
+              ? locale === "cs"
+                ? "Změny zatím nejsou použité."
+                : locale === "en"
+                  ? "Changes have not been applied yet."
+                  : "Зміни ще не застосовано."
+              : locale === "cs"
+                ? "Beze změn."
+                : locale === "en"
+                  ? "No changes."
+                  : "Без змін."}
+          </span>
+          <button type="button" className="cmsManagerCancel" onClick={close}>
+            {c.cancel}
+          </button>
+          <button
+            type="button"
+            className="cmsManagerSave"
+            onClick={saveAndClose}
+            disabled={!changed || Boolean(uploading)}
+          >
+            {c.save}
+          </button>
+        </footer>
       </section>
     </div>
   );

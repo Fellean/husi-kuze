@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { getEssayReadingTime } from "./texty/data";
 import AgeGate from "./components/AgeGate";
 import SiteHeader from "./components/SiteHeader";
@@ -115,13 +116,30 @@ function CmsButtons({
     >
       {visible.map((button) => (
         <a
-          className={
+          className={`${
             button.style === "quiet" ? "buttonQuiet" : "buttonStrong"
-          }
+          } cmsButtonCustom cmsButtonFrame-${
+            button.frame ?? (button.style === "quiet" ? "line" : "none")
+          } cmsButtonShape-${button.shape ?? "square"} cmsButtonWidth-${
+            button.width ?? "auto"
+          }`}
           href={button.href}
           key={button.id}
           target={button.target === "new" ? "_blank" : undefined}
           rel={button.target === "new" ? "noreferrer" : undefined}
+          style={
+            {
+              "--cms-button-bg":
+                button.backgroundColor ??
+                (button.style === "quiet" ? "transparent" : "#ed2859"),
+              "--cms-button-text":
+                button.textColor ??
+                (button.style === "quiet" ? "#111820" : "#ffffff"),
+              "--cms-button-border":
+                button.borderColor ??
+                (button.style === "quiet" ? "#111820" : "#ed2859"),
+            } as CSSProperties
+          }
         >
           {button.label}
         </a>
@@ -257,10 +275,27 @@ export default async function Home({
     ...cmsContent.articles,
   ];
   const localizedChapters = localizeDeep(projectChapters, locale);
-  const localizedGalleryCategories = [
-    ...localizeDeep(siteContent.galleryCategories, locale),
+  const baseGalleryCategories = localizeDeep(
+    siteContent.galleryCategories,
+    locale,
+  );
+  const unorderedGalleryCategories = [
+    ...baseGalleryCategories,
     ...cmsContent.categories,
   ];
+  const categoryIds = unorderedGalleryCategories.map((category) => category.id);
+  const categoryOrder = [
+    ...(cmsContent.categoryOrder ?? []).filter((categoryId) =>
+      categoryIds.includes(categoryId),
+    ),
+    ...categoryIds.filter(
+      (categoryId) => !(cmsContent.categoryOrder ?? []).includes(categoryId),
+    ),
+  ];
+  const localizedGalleryCategories = [...unorderedGalleryCategories].sort(
+    (left, right) =>
+      categoryOrder.indexOf(left.id) - categoryOrder.indexOf(right.id),
+  );
   const localizedResearch = localizeDeep(researchLinks, locale);
   const coreEssays = localizedEssays.slice(0, 3);
   const ideaEssays = localizedEssays.slice(3);
@@ -280,7 +315,15 @@ export default async function Home({
 
   return (
     <main className={editable ? "modernHome cmsEditing" : "modernHome"} data-cms-root>
-      <InlineCms locale={locale} editable={editable} scope="home" />
+      <InlineCms
+        locale={locale}
+        editable={editable}
+        scope="home"
+        baseCategories={baseGalleryCategories.map((category) => ({
+          id: category.id,
+          title: category.title,
+        }))}
+      />
       {!editable && <AgeGate locale={locale} />}
       <SiteHeader locale={locale} />
 
@@ -509,16 +552,41 @@ export default async function Home({
           <h2>{t(locale, "Klikni. Obraz se otevře i s kontextem.")}</h2>
           <p>{t(locale, "Galerie je vodorovná, aby z webu nebyl scrollovací sarkofág. Tažením nebo kolečkem pokračuješ doprava.")}</p>
         </header>
-        {localizedGalleryCategories.map((category) => (
-          <section
-            className="galleryCategory"
-            data-cms-ignore={
-              cmsContent.categories.some((item) => item.id === category.id)
-                ? ""
-                : undefined
-            }
-            key={category.id}
-          >
+        {localizedGalleryCategories.map((category) => {
+          const customCategory = cmsContent.categories.find(
+            (item) => item.id === category.id,
+          );
+          return (
+            <section
+              className={
+                customCategory
+                  ? `galleryCategory cmsCategoryCustom cmsCategoryLayout-${
+                      customCategory.layout ?? "strip"
+                    } cmsCategoryFrame-${
+                      customCategory.frame ?? "line"
+                    } cmsCategoryRatio-${
+                      customCategory.imageRatio ?? "landscape"
+                    } cmsCategoryFit-${customCategory.imageFit ?? "cover"}`
+                  : "galleryCategory"
+              }
+              data-cms-ignore={customCategory ? "" : undefined}
+              key={category.id}
+              style={
+                customCategory
+                  ? ({
+                      "--cms-category-bg":
+                        customCategory.backgroundColor ?? "#f2eee7",
+                      "--cms-category-text":
+                        customCategory.textColor ?? "#111820",
+                      "--cms-category-accent":
+                        customCategory.accentColor ?? "#ed2859",
+                      "--cms-category-columns": String(
+                        customCategory.columns ?? 3,
+                      ),
+                    } as CSSProperties)
+                  : undefined
+              }
+            >
             <header>
               <h3>{category.title}</h3>
               <p>{category.description}</p>
@@ -537,7 +605,8 @@ export default async function Home({
               ))}
             </div>
           </section>
-        ))}
+          );
+        })}
       </section>
 
       <section id="dukazy" className="evidenceSection">

@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Locale } from "../i18n";
 import {
   emptyCmsContent,
   isCmsContent,
   type CmsContent,
 } from "../cms-content";
-import CmsContentManager from "./CmsContentManager";
+import CmsContentManager, {
+  type CmsBaseCategory,
+} from "./CmsContentManager";
 
 type PatchKind = "text" | "href" | "src" | "alt";
 
@@ -313,13 +316,16 @@ export default function InlineCms({
   editable,
   scope,
   basePath = "/",
+  baseCategories = [],
 }: {
   locale: Locale;
   editable: boolean;
   scope: string;
   basePath?: string;
+  baseCategories?: CmsBaseCategory[];
 }) {
   const c = labels[locale];
+  const router = useRouter();
   const dirty = useRef(new Map<string, CmsPatch>());
   const translationRetry = useRef<TranslationRetry | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -659,6 +665,7 @@ export default function InlineCms({
     if (locale !== "cs" || !autoTranslate) {
       translationRetry.current = null;
       setStatus("saved");
+      router.refresh();
       return;
     }
 
@@ -670,8 +677,10 @@ export default function InlineCms({
     if (await translateAndPersist(patches, contentToSave)) {
       translationRetry.current = null;
       setStatus("translated");
+      router.refresh();
     } else {
       setStatus("translationError");
+      router.refresh();
     }
   }
 
@@ -895,7 +904,8 @@ export default function InlineCms({
         <CmsContentManager
           locale={locale}
           content={content}
-          onChange={(nextContent) => {
+          baseCategories={baseCategories}
+          onSave={(nextContent) => {
             setContent(nextContent);
             setContentDirty(true);
             setStatus("idle");

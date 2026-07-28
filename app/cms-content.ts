@@ -12,6 +12,14 @@ export type CmsCategory = {
   title: string;
   description: string;
   images: CmsImage[];
+  layout?: "strip" | "grid" | "feature";
+  frame?: "none" | "line" | "heavy" | "shadow";
+  imageFit?: "cover" | "contain";
+  imageRatio?: "landscape" | "square" | "portrait";
+  columns?: 2 | 3 | 4;
+  backgroundColor?: string;
+  textColor?: string;
+  accentColor?: string;
 };
 
 export type CmsArticleSection = {
@@ -52,12 +60,19 @@ export type CmsButton = {
   location: "hero" | "essays" | "contact";
   style: "strong" | "quiet";
   target: "new" | "same";
+  frame?: "none" | "line" | "heavy" | "shadow";
+  shape?: "square" | "soft" | "pill";
+  width?: "auto" | "full";
+  backgroundColor?: string;
+  textColor?: string;
+  borderColor?: string;
 };
 
 export type CmsContent = {
   categories: CmsCategory[];
   articles: CmsArticle[];
   buttons: CmsButton[];
+  categoryOrder?: string[];
 };
 
 export const emptyCmsContent = (): CmsContent => ({
@@ -100,7 +115,21 @@ function validCategory(value: unknown): value is CmsCategory {
     isString(category.description) &&
     Array.isArray(category.images) &&
     category.images.length <= 100 &&
-    category.images.every(validImage)
+    category.images.every(validImage) &&
+    (category.layout === undefined ||
+      ["strip", "grid", "feature"].includes(category.layout)) &&
+    (category.frame === undefined ||
+      ["none", "line", "heavy", "shadow"].includes(category.frame)) &&
+    (category.imageFit === undefined ||
+      ["cover", "contain"].includes(category.imageFit)) &&
+    (category.imageRatio === undefined ||
+      ["landscape", "square", "portrait"].includes(category.imageRatio)) &&
+    (category.columns === undefined ||
+      [2, 3, 4].includes(category.columns)) &&
+    (category.backgroundColor === undefined ||
+      validColor(category.backgroundColor)) &&
+    (category.textColor === undefined || validColor(category.textColor)) &&
+    (category.accentColor === undefined || validColor(category.accentColor))
   );
 }
 
@@ -161,7 +190,24 @@ function validButton(value: unknown): value is CmsButton {
     isString(button.href, 2_000) &&
     ["hero", "essays", "contact"].includes(button.location ?? "") &&
     ["strong", "quiet"].includes(button.style ?? "") &&
-    ["new", "same"].includes(button.target ?? "")
+    ["new", "same"].includes(button.target ?? "") &&
+    (button.frame === undefined ||
+      ["none", "line", "heavy", "shadow"].includes(button.frame)) &&
+    (button.shape === undefined ||
+      ["square", "soft", "pill"].includes(button.shape)) &&
+    (button.width === undefined ||
+      ["auto", "full"].includes(button.width)) &&
+    (button.backgroundColor === undefined ||
+      validColor(button.backgroundColor)) &&
+    (button.textColor === undefined || validColor(button.textColor)) &&
+    (button.borderColor === undefined || validColor(button.borderColor))
+  );
+}
+
+function validColor(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^#[0-9a-f]{6}$/i.test(value)
   );
 }
 
@@ -179,6 +225,11 @@ export function isCmsContent(value: unknown): value is CmsContent {
       content.articles.length &&
     Array.isArray(content.buttons) &&
     content.buttons.length <= 100 &&
-    content.buttons.every(validButton)
+    content.buttons.every(validButton) &&
+    (content.categoryOrder === undefined ||
+      (Array.isArray(content.categoryOrder) &&
+        content.categoryOrder.length <= 100 &&
+        content.categoryOrder.every((id) => isString(id, 120)) &&
+        new Set(content.categoryOrder).size === content.categoryOrder.length))
   );
 }
