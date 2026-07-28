@@ -8,6 +8,8 @@ import { requireAdminSession } from "./selfhost-auth";
 import siteContent from "./content/site-content.json";
 import { localizeDeep, normalizeLocale, t, withLocale } from "./i18n";
 import { getLocalizedEssays } from "./texty/localized";
+import { getCmsContent } from "./cms-storage";
+import type { CmsButton } from "./cms-content";
 
 const decisionImages = [
   "/gallery/drevo-telo.webp",
@@ -92,6 +94,41 @@ const researchLinks = [
     takeaway: "Metodika řeší uzavřený set, popis natáčené situace, omezení improvizace a práci s nahotou bez eufemismů.",
   },
 ];
+
+function CmsButtons({
+  buttons,
+  location,
+}: {
+  buttons: CmsButton[];
+  location: CmsButton["location"];
+}) {
+  const visible = buttons.filter(
+    (button) =>
+      button.location === location && button.label.trim() && button.href.trim(),
+  );
+  if (visible.length === 0) return null;
+
+  return (
+    <div
+      className={`customButtons customButtons-${location}`}
+      data-cms-ignore
+    >
+      {visible.map((button) => (
+        <a
+          className={
+            button.style === "quiet" ? "buttonQuiet" : "buttonStrong"
+          }
+          href={button.href}
+          key={button.id}
+          target={button.target === "new" ? "_blank" : undefined}
+          rel={button.target === "new" ? "noreferrer" : undefined}
+        >
+          {button.label}
+        </a>
+      ))}
+    </div>
+  );
+}
 
 const projectChapters = [
   {
@@ -214,12 +251,22 @@ export default async function Home({
       locale === "cs" ? "/?edit=1" : `/?edit=1&lang=${locale}`;
     await requireAdminSession(returnTo);
   }
-  const localizedEssays = getLocalizedEssays(locale);
+  const cmsContent = await getCmsContent(locale);
+  const localizedEssays = [
+    ...getLocalizedEssays(locale),
+    ...cmsContent.articles,
+  ];
   const localizedChapters = localizeDeep(projectChapters, locale);
-  const localizedGalleryCategories = localizeDeep(siteContent.galleryCategories, locale);
+  const localizedGalleryCategories = [
+    ...localizeDeep(siteContent.galleryCategories, locale),
+    ...cmsContent.categories,
+  ];
   const localizedResearch = localizeDeep(researchLinks, locale);
   const coreEssays = localizedEssays.slice(0, 3);
   const ideaEssays = localizedEssays.slice(3);
+  const customArticleSlugs = new Set(
+    cmsContent.articles.map((article) => article.slug),
+  );
   const logotypeSrc = locale === "en"
     ? "/brand/logotyp-en.svg"
     : locale === "uk"
@@ -249,6 +296,7 @@ export default async function Home({
             <a className="buttonStrong" href={pdfHref} target="_blank" rel="noreferrer">{t(locale, "Otevřít stručné PDF ↗")}</a>
             <a className="buttonQuiet" href="#texty">{t(locale, "Číst autorské texty ↓")}</a>
           </div>
+          <CmsButtons buttons={cmsContent.buttons} location="hero" />
         </div>
         <ZoomableImage
           className="heroZoom"
@@ -374,7 +422,14 @@ export default async function Home({
         </header>
         <div className="ideaGrid">
           {ideaEssays.map((essay, index) => (
-            <article className="ideaCard" data-essay={essay.slug} key={essay.slug}>
+            <article
+              className="ideaCard"
+              data-essay={essay.slug}
+              data-cms-ignore={
+                customArticleSlugs.has(essay.slug) ? "" : undefined
+              }
+              key={essay.slug}
+            >
               <ZoomableImage
                 className="ideaImage"
                 src={essay.cover}
@@ -391,6 +446,7 @@ export default async function Home({
             </article>
           ))}
         </div>
+        <CmsButtons buttons={cmsContent.buttons} location="essays" />
       </section>
 
       <section id="projekt" className="projectGuide">
@@ -454,7 +510,15 @@ export default async function Home({
           <p>{t(locale, "Galerie je vodorovná, aby z webu nebyl scrollovací sarkofág. Tažením nebo kolečkem pokračuješ doprava.")}</p>
         </header>
         {localizedGalleryCategories.map((category) => (
-          <section className="galleryCategory" key={category.id}>
+          <section
+            className="galleryCategory"
+            data-cms-ignore={
+              cmsContent.categories.some((item) => item.id === category.id)
+                ? ""
+                : undefined
+            }
+            key={category.id}
+          >
             <header>
               <h3>{category.title}</h3>
               <p>{category.description}</p>
@@ -584,6 +648,7 @@ export default async function Home({
           <h3>{t(locale, "První setkání je bez kamery, bez závazku a bez přesvědčování.")}</h3>
           <a href="mailto:stepanchalupa@post.cz?subject=Husí kůže">{t(locale, "Napsat e-mail ↗")}</a>
           <a href="#formular">{t(locale, "Otevřít nezávazný formulář ↑")}</a>
+          <CmsButtons buttons={cmsContent.buttons} location="contact" />
         </div>
       </section>
 

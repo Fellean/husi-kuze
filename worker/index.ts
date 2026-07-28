@@ -1,6 +1,7 @@
 /** Cloudflare Worker entry point with self-contained persistent storage. */
 import { DurableObject } from "cloudflare:workers";
 import handler from "vinext/server/app-router-entry";
+import { emptyCmsContent, isCmsContent } from "../app/cms-content";
 
 type PatchKind = "text" | "href" | "src" | "alt";
 
@@ -144,6 +145,41 @@ export class HusiKuzeCms extends DurableObject<Env> {
     return json({ saved: patches.length, updatedAt: now });
   }
 
+  private async content(request: Request, url: URL) {
+    const locale = url.searchParams.get("locale") ?? "cs";
+    if (!allowedLocales.has(locale)) {
+      return json({ error: "Unsupported locale." }, { status: 400 });
+    }
+
+    const storageKey = `cms-content:${locale}`;
+    if (request.method === "GET") {
+      const saved = await this.ctx.storage.get<unknown>(storageKey);
+      return json({
+        content: isCmsContent(saved) ? saved : emptyCmsContent(),
+      });
+    }
+
+    if (request.method !== "PUT") {
+      return new Response("Method not allowed.", { status: 405 });
+    }
+
+    let payload: { content?: unknown };
+    try {
+      payload = (await request.json()) as typeof payload;
+    } catch {
+      return json({ error: "Invalid request." }, { status: 400 });
+    }
+    if (!isCmsContent(payload.content)) {
+      return json({ error: "Invalid content." }, { status: 400 });
+    }
+
+    await this.ctx.storage.put(storageKey, payload.content);
+    return json({
+      saved: true,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   private async media(request: Request, url: URL) {
     if (request.method === "GET") {
       const key = url.searchParams.get("key") ?? "";
@@ -268,6 +304,7 @@ export class HusiKuzeCms extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/patches") return this.patches(request, url);
+    if (url.pathname === "/content") return this.content(request, url);
     if (url.pathname === "/media") return this.media(request, url);
     if (url.pathname === "/login") return this.login(request, url);
     return new Response("Not found.", { status: 404 });

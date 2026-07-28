@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Locale } from "../i18n";
+import {
+  emptyCmsContent,
+  isCmsContent,
+  type CmsContent,
+} from "../cms-content";
+import CmsContentManager from "./CmsContentManager";
 
 type PatchKind = "text" | "href" | "src" | "alt";
 
@@ -20,6 +26,13 @@ type SelectedElement = {
   imageKey?: string;
   alt?: string;
 };
+
+type TranslationRetry = {
+  patches: CmsPatch[];
+  content?: CmsContent;
+};
+
+const contentPatchPrefix = "content::";
 
 const labels = {
   cs: {
@@ -44,6 +57,7 @@ const labels = {
     dirty: "neuložených změn",
     error: "Uložení se nepovedlo. Zkus to znovu.",
     openArticle: "Otevřít článek v editoru",
+    manage: "Přidat obsah",
     exit: "Konec úprav",
     logout: "Odhlásit editor",
   },
@@ -69,6 +83,7 @@ const labels = {
     dirty: "unsaved changes",
     error: "Saving failed. Please try again.",
     openArticle: "Open article in editor",
+    manage: "Add content",
     exit: "Exit editing",
     logout: "Sign out",
   },
@@ -94,10 +109,104 @@ const labels = {
     dirty: "незбережених змін",
     error: "Не вдалося зберегти. Спробуй ще раз.",
     openArticle: "Відкрити статтю в редакторі",
+    manage: "Додати вміст",
     exit: "Завершити редагування",
     logout: "Вийти",
   },
 } as const;
+
+function contentTranslationPatches(content: CmsContent): CmsPatch[] {
+  const patches: CmsPatch[] = [];
+  const add = (path: string, value: string, kind: PatchKind = "text") => {
+    patches.push({
+      key: `${contentPatchPrefix}${path}`,
+      kind,
+      value,
+    });
+  };
+
+  content.categories.forEach((category, categoryIndex) => {
+    add(`categories.${categoryIndex}.title`, category.title);
+    add(`categories.${categoryIndex}.description`, category.description);
+    category.images.forEach((image, imageIndex) => {
+      add(
+        `categories.${categoryIndex}.images.${imageIndex}.alt`,
+        image.alt,
+        "alt",
+      );
+      add(
+        `categories.${categoryIndex}.images.${imageIndex}.title`,
+        image.title,
+      );
+      add(
+        `categories.${categoryIndex}.images.${imageIndex}.caption`,
+        image.caption,
+      );
+    });
+  });
+
+  content.articles.forEach((article, articleIndex) => {
+    for (const field of ["kicker", "title", "dek", "date", "thesis"] as const) {
+      add(`articles.${articleIndex}.${field}`, article[field]);
+    }
+    add(`articles.${articleIndex}.coverAlt`, article.coverAlt, "alt");
+    article.sections.forEach((section, sectionIndex) => {
+      add(
+        `articles.${articleIndex}.sections.${sectionIndex}.title`,
+        section.title,
+      );
+      section.paragraphs.forEach((paragraph, paragraphIndex) => {
+        add(
+          `articles.${articleIndex}.sections.${sectionIndex}.paragraphs.${paragraphIndex}`,
+          paragraph,
+        );
+      });
+      if (section.imageAlt !== undefined) {
+        add(
+          `articles.${articleIndex}.sections.${sectionIndex}.imageAlt`,
+          section.imageAlt,
+          "alt",
+        );
+      }
+    });
+    article.sources.forEach((source, sourceIndex) => {
+      add(
+        `articles.${articleIndex}.sources.${sourceIndex}.title`,
+        source.title,
+      );
+      add(
+        `articles.${articleIndex}.sources.${sourceIndex}.note`,
+        source.note,
+      );
+    });
+  });
+
+  content.buttons.forEach((button, buttonIndex) => {
+    add(`buttons.${buttonIndex}.label`, button.label);
+  });
+
+  return patches;
+}
+
+function applyContentTranslations(
+  content: CmsContent,
+  patches: CmsPatch[],
+): CmsContent {
+  const translated = structuredClone(content);
+  for (const patch of patches) {
+    if (!patch.key.startsWith(contentPatchPrefix)) continue;
+    const path = patch.key.slice(contentPatchPrefix.length).split(".");
+    let current: unknown = translated;
+    for (let index = 0; index < path.length - 1; index += 1) {
+      if (!current || typeof current !== "object") break;
+      current = (current as Record<string, unknown>)[path[index]];
+    }
+    if (current && typeof current === "object") {
+      (current as Record<string, unknown>)[path.at(-1) ?? ""] = patch.value;
+    }
+  }
+  return translated;
+}
 
 function elementPath(element: Element, root: Element): string {
   const segments: string[] = [];
@@ -212,7 +321,7 @@ export default function InlineCms({
 }) {
   const c = labels[locale];
   const dirty = useRef(new Map<string, CmsPatch>());
-  const translationRetry = useRef<CmsPatch[]>([]);
+  const translationRetry = useRef<TranslationRetry | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const selectedImage = useRef<HTMLImageElement | null>(null);
   const selectedLink = useRef<HTMLAnchorElement | null>(null);
@@ -229,6 +338,10 @@ export default function InlineCms({
   const [autoTranslate, setAutoTranslate] = useState(locale === "cs");
   const [uploading, setUploading] = useState(false);
   const [selected, setSelected] = useState<SelectedElement | null>(null);
+  const [content, setContent] = useState<CmsContent>(emptyCmsContent);
+  const [contentDirty, setContentDirty] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
+  const totalDirty = dirtyCount + (contentDirty ? 1 : 0);
   const selectedArticleHref = selected?.href
     ? articleEditorHref(selected.href, locale)
     : null;
@@ -248,13 +361,25 @@ export default function InlineCms({
     let cleanupListeners = () => {};
 
     async function initialize() {
-      const response = await fetch(`/api/cms?locale=${locale}`, {
-        cache: "no-store",
-      });
+      const [response, contentResponse] = await Promise.all([
+        fetch(`/api/cms?locale=${locale}`, { cache: "no-store" }),
+        fetch(`/api/cms?locale=${locale}&content=1`, {
+          cache: "no-store",
+        }),
+      ]);
       const payload = response.ok
         ? ((await response.json()) as { patches?: CmsPatch[] })
         : { patches: [] };
+      const contentPayload = contentResponse.ok
+        ? ((await contentResponse.json()) as { content?: unknown })
+        : { content: undefined };
       if (cancelled) return;
+      setContent(
+        isCmsContent(contentPayload.content)
+          ? contentPayload.content
+          : emptyCmsContent(),
+      );
+      setContentDirty(false);
 
       const patches = new Map(
         (payload.patches ?? []).map((patch) => [
@@ -397,12 +522,12 @@ export default function InlineCms({
   useEffect(() => {
     if (!editable) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (dirty.current.size === 0) return;
+      if (dirty.current.size === 0 && !contentDirty) return;
       event.preventDefault();
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [editable]);
+  }, [contentDirty, editable]);
 
   async function persistLocale(targetLocale: Locale, patches: CmsPatch[]) {
     const response = await fetch("/api/cms", {
@@ -426,11 +551,45 @@ export default function InlineCms({
     return false;
   }
 
-  async function translateAndPersist(patches: CmsPatch[]) {
+  async function persistContent(
+    targetLocale: Locale,
+    targetContent: CmsContent,
+  ) {
+    const response = await fetch("/api/cms", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        locale: targetLocale,
+        content: targetContent,
+      }),
+    });
+    if (response.ok) return true;
+
+    let reason = "";
+    try {
+      const payload = (await response.json()) as { error?: unknown };
+      if (typeof payload.error === "string") reason = payload.error;
+    } catch {
+      reason = `HTTP ${response.status}`;
+    }
+    console.error("CMS content save failed.", response.status, reason);
+    return false;
+  }
+
+  async function translateAndPersist(
+    patches: CmsPatch[],
+    targetContent?: CmsContent,
+  ) {
+    const contentPatches = targetContent
+      ? contentTranslationPatches(targetContent)
+      : [];
+    const translationBatch = [...patches, ...contentPatches];
+    if (translationBatch.length === 0) return true;
+
     const response = await fetch("/api/translate", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ patches }),
+      body: JSON.stringify({ patches: translationBatch }),
     });
     if (!response.ok) return false;
 
@@ -441,18 +600,37 @@ export default function InlineCms({
     const uk = payload.translations?.uk;
     if (!Array.isArray(en) || !Array.isArray(uk)) return false;
 
-    const results = await Promise.all([
-      persistLocale("en", en),
-      persistLocale("uk", uk),
-    ]);
+    const enPatches = en.filter(
+      (patch) => !patch.key.startsWith(contentPatchPrefix),
+    );
+    const ukPatches = uk.filter(
+      (patch) => !patch.key.startsWith(contentPatchPrefix),
+    );
+    const requests: Promise<boolean>[] = [];
+    if (enPatches.length > 0) requests.push(persistLocale("en", enPatches));
+    if (ukPatches.length > 0) requests.push(persistLocale("uk", ukPatches));
+    if (targetContent) {
+      requests.push(
+        persistContent(
+          "en",
+          applyContentTranslations(targetContent, en),
+        ),
+        persistContent(
+          "uk",
+          applyContentTranslations(targetContent, uk),
+        ),
+      );
+    }
+    const results = await Promise.all(requests);
     return results.every(Boolean);
   }
 
   async function retryTranslation() {
-    if (translationRetry.current.length === 0) return;
+    const retry = translationRetry.current;
+    if (!retry) return;
     setStatus("translating");
-    if (await translateAndPersist(translationRetry.current)) {
-      translationRetry.current = [];
+    if (await translateAndPersist(retry.patches, retry.content)) {
+      translationRetry.current = null;
       setStatus("translated");
     } else {
       setStatus("translationError");
@@ -460,26 +638,37 @@ export default function InlineCms({
   }
 
   async function save() {
-    if (dirty.current.size === 0) return;
+    if (dirty.current.size === 0 && !contentDirty) return;
     setStatus("saving");
     const patches = Array.from(dirty.current.values());
-    if (!(await persistLocale(locale, patches))) {
+    const contentToSave = contentDirty ? structuredClone(content) : undefined;
+    const localResults = await Promise.all([
+      patches.length > 0 ? persistLocale(locale, patches) : Promise.resolve(true),
+      contentToSave
+        ? persistContent(locale, contentToSave)
+        : Promise.resolve(true),
+    ]);
+    if (!localResults.every(Boolean)) {
       setStatus("error");
       return;
     }
 
     dirty.current.clear();
     setDirtyCount(0);
+    setContentDirty(false);
     if (locale !== "cs" || !autoTranslate) {
-      translationRetry.current = [];
+      translationRetry.current = null;
       setStatus("saved");
       return;
     }
 
-    translationRetry.current = patches;
+    translationRetry.current = {
+      patches,
+      content: contentToSave,
+    };
     setStatus("translating");
-    if (await translateAndPersist(patches)) {
-      translationRetry.current = [];
+    if (await translateAndPersist(patches, contentToSave)) {
+      translationRetry.current = null;
       setStatus("translated");
     } else {
       setStatus("translationError");
@@ -504,6 +693,21 @@ export default function InlineCms({
     remember({ key, kind: "alt", value });
   }
 
+  async function uploadMedia(file: File, key: string) {
+    const prepared = await prepareImage(file);
+    const body = new FormData();
+    body.set("file", prepared);
+    body.set("locale", locale);
+    body.set("key", key);
+
+    const response = await fetch("/api/media", { method: "POST", body });
+    const payload = (await response.json()) as { url?: string };
+    if (!response.ok || !payload.url) {
+      throw new Error("Image upload failed.");
+    }
+    return payload.url;
+  }
+
   async function uploadImage(file: File) {
     const image = selectedImage.current;
     const key = selected?.imageKey;
@@ -511,21 +715,9 @@ export default function InlineCms({
     setUploading(true);
 
     try {
-      const prepared = await prepareImage(file);
-      const body = new FormData();
-      body.set("file", prepared);
-      body.set("locale", locale);
-      body.set("key", key);
-
-      const response = await fetch("/api/media", { method: "POST", body });
-      const payload = (await response.json()) as { url?: string };
-      if (!response.ok || !payload.url) {
-        setStatus("error");
-        return;
-      }
-
-      image.src = payload.url;
-      remember({ key, kind: "src", value: payload.url });
+      const url = await uploadMedia(file, key);
+      image.src = url;
+      remember({ key, kind: "src", value: url });
     } catch {
       setStatus("error");
     } finally {
@@ -536,158 +728,182 @@ export default function InlineCms({
   if (!editable) return null;
 
   return (
-    <aside className="cmsToolbar" data-cms-ignore aria-label={c.title}>
-      <div className="cmsToolbarIntro">
-        <strong>{c.title}</strong>
-        <span>{c.hint}</span>
-        {locale === "cs" && (
-          <label className="cmsAutoTranslate">
-            <input
-              type="checkbox"
-              checked={autoTranslate}
-              onChange={(event) => setAutoTranslate(event.target.checked)}
-            />
-            {c.translateToggle}
-          </label>
-        )}
-      </div>
-
-      <nav className="cmsLanguages" aria-label="Jazyk upravované stránky">
-        <Link
-          aria-current={locale === "cs" ? "page" : undefined}
-          href={`${basePath}?edit=1`}
-        >
-          CS
-        </Link>
-        <Link
-          aria-current={locale === "en" ? "page" : undefined}
-          href={`${basePath}?edit=1&lang=en`}
-        >
-          EN
-        </Link>
-        <Link
-          aria-current={locale === "uk" ? "page" : undefined}
-          href={`${basePath}?edit=1&lang=uk`}
-        >
-          UA
-        </Link>
-      </nav>
-
-      {selected && (
-        <div className="cmsSelection">
-          <span>
-            {c.selected}: <strong>{selected.label}</strong>
-          </span>
-          {selected.linkKey && (
-            <>
-              <label>
-                {c.link}
-                <input
-                  type="url"
-                  value={selected.href ?? ""}
-                  onChange={(event) => updateHref(event.target.value)}
-                />
-              </label>
-              {selectedArticleHref && (
-                <Link className="cmsOpen" href={selectedArticleHref}>
-                  {c.openArticle}
-                </Link>
-              )}
-            </>
-          )}
-          {selected.imageKey && (
-            <>
-              <label>
-                Alt
-                <input
-                  type="text"
-                  value={selected.alt ?? ""}
-                  onChange={(event) => updateAlt(event.target.value)}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => fileInput.current?.click()}
-                disabled={uploading}
-              >
-                {uploading ? c.uploading : c.upload}
-              </button>
+    <>
+      <aside className="cmsToolbar" data-cms-ignore aria-label={c.title}>
+        <div className="cmsToolbarIntro">
+          <strong>{c.title}</strong>
+          <span>{c.hint}</span>
+          {locale === "cs" && (
+            <label className="cmsAutoTranslate">
               <input
-                ref={fileInput}
-                hidden
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void uploadImage(file);
-                  event.target.value = "";
-                }}
+                type="checkbox"
+                checked={autoTranslate}
+                onChange={(event) => setAutoTranslate(event.target.checked)}
               />
-            </>
+              {c.translateToggle}
+            </label>
           )}
         </div>
-      )}
 
-      <div className="cmsActions">
-        <span>
-          {dirtyCount === 0 ? c.clean : `${dirtyCount} ${c.dirty}`}
-        </span>
-        {status === "saved" && <b>{c.saved}</b>}
-        {status === "translating" && <b>{c.translating}</b>}
-        {status === "translated" && <b>{c.translated}</b>}
-        {status === "translationError" && (
-          <>
-            <b className="cmsError">{c.translationError}</b>
-            <button
-              type="button"
-              onClick={() => void retryTranslation()}
-            >
-              {c.retryTranslation}
-            </button>
-          </>
+        <nav className="cmsLanguages" aria-label="Jazyk upravované stránky">
+          <Link
+            aria-current={locale === "cs" ? "page" : undefined}
+            href={`${basePath}?edit=1`}
+          >
+            CS
+          </Link>
+          <Link
+            aria-current={locale === "en" ? "page" : undefined}
+            href={`${basePath}?edit=1&lang=en`}
+          >
+            EN
+          </Link>
+          <Link
+            aria-current={locale === "uk" ? "page" : undefined}
+            href={`${basePath}?edit=1&lang=uk`}
+          >
+            UA
+          </Link>
+        </nav>
+
+        <button
+          type="button"
+          className="cmsManage"
+          onClick={() => setManagerOpen(true)}
+        >
+          + {c.manage}
+        </button>
+
+        {selected && (
+          <div className="cmsSelection">
+            <span>
+              {c.selected}: <strong>{selected.label}</strong>
+            </span>
+            {selected.linkKey && (
+              <>
+                <label>
+                  {c.link}
+                  <input
+                    type="url"
+                    value={selected.href ?? ""}
+                    onChange={(event) => updateHref(event.target.value)}
+                  />
+                </label>
+                {selectedArticleHref && (
+                  <Link className="cmsOpen" href={selectedArticleHref}>
+                    {c.openArticle}
+                  </Link>
+                )}
+              </>
+            )}
+            {selected.imageKey && (
+              <>
+                <label>
+                  Alt
+                  <input
+                    type="text"
+                    value={selected.alt ?? ""}
+                    onChange={(event) => updateAlt(event.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  disabled={uploading}
+                >
+                  {uploading ? c.uploading : c.upload}
+                </button>
+                <input
+                  ref={fileInput}
+                  hidden
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void uploadImage(file);
+                    event.target.value = "";
+                  }}
+                />
+              </>
+            )}
+          </div>
         )}
-        {status === "error" && <b className="cmsError">{c.error}</b>}
-        <button
-          type="button"
-          className="cmsDiscard"
-          onClick={() => window.location.reload()}
-          disabled={dirtyCount === 0}
-        >
-          {c.reload}
-        </button>
-        <button
-          type="button"
-          className="cmsSave"
-          onClick={() => void save()}
-          disabled={
-            dirtyCount === 0 ||
-            status === "saving" ||
-            status === "translating"
-          }
-        >
-          {status === "saving"
-            ? c.saving
-            : status === "translating"
-              ? c.translating
-              : locale === "cs" && autoTranslate
-                ? c.saveWithTranslation
-                : c.save}
-        </button>
-        <Link
-          className="cmsExit"
-          href={locale === "cs" ? basePath : `${basePath}?lang=${locale}`}
-        >
-          {c.exit}
-        </Link>
-        <a
-          className="cmsExit"
-          href={`/api/auth/logout?returnTo=${encodeURIComponent(
-            locale === "cs" ? basePath : `${basePath}?lang=${locale}`,
-          )}`}
-        >
-          {c.logout}
-        </a>
-      </div>
-    </aside>
+
+        <div className="cmsActions">
+          <span>
+            {totalDirty === 0 ? c.clean : `${totalDirty} ${c.dirty}`}
+          </span>
+          {status === "saved" && <b>{c.saved}</b>}
+          {status === "translating" && <b>{c.translating}</b>}
+          {status === "translated" && <b>{c.translated}</b>}
+          {status === "translationError" && (
+            <>
+              <b className="cmsError">{c.translationError}</b>
+              <button
+                type="button"
+                onClick={() => void retryTranslation()}
+              >
+                {c.retryTranslation}
+              </button>
+            </>
+          )}
+          {status === "error" && <b className="cmsError">{c.error}</b>}
+          <button
+            type="button"
+            className="cmsDiscard"
+            onClick={() => window.location.reload()}
+            disabled={totalDirty === 0}
+          >
+            {c.reload}
+          </button>
+          <button
+            type="button"
+            className="cmsSave"
+            onClick={() => void save()}
+            disabled={
+              totalDirty === 0 ||
+              status === "saving" ||
+              status === "translating"
+            }
+          >
+            {status === "saving"
+              ? c.saving
+              : status === "translating"
+                ? c.translating
+                : locale === "cs" && autoTranslate
+                  ? c.saveWithTranslation
+                  : c.save}
+          </button>
+          <Link
+            className="cmsExit"
+            href={locale === "cs" ? basePath : `${basePath}?lang=${locale}`}
+          >
+            {c.exit}
+          </Link>
+          <a
+            className="cmsExit"
+            href={`/api/auth/logout?returnTo=${encodeURIComponent(
+              locale === "cs" ? basePath : `${basePath}?lang=${locale}`,
+            )}`}
+          >
+            {c.logout}
+          </a>
+        </div>
+      </aside>
+
+      {managerOpen && (
+        <CmsContentManager
+          locale={locale}
+          content={content}
+          onChange={(nextContent) => {
+            setContent(nextContent);
+            setContentDirty(true);
+            setStatus("idle");
+          }}
+          onClose={() => setManagerOpen(false)}
+          upload={uploadMedia}
+        />
+      )}
+    </>
   );
 }
