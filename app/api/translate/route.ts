@@ -18,7 +18,7 @@ type TranslationItem = {
 const allowedKinds = new Set<PatchKind>(["text", "href", "src", "alt"]);
 const translatableKinds = new Set<PatchKind>(["text", "alt"]);
 const model = "gpt-5.6-luna";
-const maxPatches = 200;
+const maxPatches = 1_000;
 const maxSourceCharacters = 80_000;
 
 function validPatch(value: unknown): value is CmsPatch {

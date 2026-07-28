@@ -8,6 +8,7 @@ import LanguageSwitcher from "../../components/LanguageSwitcher";
 import { requireAdminSession } from "../../selfhost-auth";
 import { normalizeLocale, t, withLocale } from "../../i18n";
 import { getLocalizedEssay } from "../localized";
+import { getCmsContent } from "../../cms-storage";
 
 export function generateStaticParams() {
   return essays.map(({ slug }) => ({ slug }));
@@ -36,7 +37,11 @@ export default async function EssayPage({
         : `${basePath}?edit=1&lang=${locale}`;
     await requireAdminSession(returnTo);
   }
-  const essay = getLocalizedEssay(slug, locale);
+  const cmsContent = await getCmsContent(locale);
+  const customArticle = cmsContent.articles.find(
+    (article) => article.slug === slug,
+  );
+  const essay = getLocalizedEssay(slug, locale) ?? customArticle;
   if (!essay) notFound();
   const basePath = `/texty/${slug}`;
 
@@ -59,7 +64,7 @@ export default async function EssayPage({
           <LanguageSwitcher locale={locale} label={t(locale, "Jazyk webu")} />
         </div>
       </header>
-      <article>
+      <article data-cms-ignore={customArticle ? "" : undefined}>
         <section className="essayHero">
           <div className="essayHeroCopy">
             <p className="eyebrow">{essay.kicker}</p>

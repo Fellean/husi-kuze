@@ -123,3 +123,42 @@ test("large still images are compressed before Cloudflare storage", async () => 
   assert.match(editor, /image\/webp/);
   assert.match(editor, /maxUploadBytes/);
 });
+
+test("online editor can add categories, articles and buttons", async () => {
+  const editor = await readFile(
+    new URL("app/components/InlineCms.tsx", root),
+    "utf8",
+  );
+  const manager = await readFile(
+    new URL("app/components/CmsContentManager.tsx", root),
+    "utf8",
+  );
+  const cmsRoute = await readFile(
+    new URL("app/api/cms/route.ts", root),
+    "utf8",
+  );
+  const worker = await readFile(
+    new URL("worker/index.ts", root),
+    "utf8",
+  );
+  const homepage = await readFile(
+    new URL("app/page.tsx", root),
+    "utf8",
+  );
+  const articlePage = await readFile(
+    new URL("app/texty/[slug]/page.tsx", root),
+    "utf8",
+  );
+
+  assert.match(editor, /CmsContentManager/);
+  assert.match(editor, /contentTranslationPatches/);
+  assert.match(manager, /Přidat kategorii/);
+  assert.match(manager, /Přidat článek/);
+  assert.match(manager, /Přidat tlačítko/);
+  assert.match(cmsRoute, /content=1|searchParams\.get\("content"\)/);
+  assert.match(worker, /cms-content:/);
+  assert.match(worker, /url\.pathname === "\/content"/);
+  assert.match(homepage, /CmsButtons/);
+  assert.match(homepage, /cmsContent\.articles/);
+  assert.match(articlePage, /cmsContent\.articles\.find/);
+});

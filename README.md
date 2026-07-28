@@ -9,6 +9,12 @@ ukládají do SQLite úložiště uvnitř stejného Cloudflare Workeru. Není po
 samostatně vytvářet D1 databázi, R2 bucket ani opisovat jejich identifikátory do
 repozitáře.
 
+V editaci je vedle přímého přepisování stránky tlačítko **Přidat obsah**.
+Otevírá správu nových kategorií galerie, článků a vlastních tlačítek. Nové
+články automaticky dostanou adresu `/texty/zvoleny-nazev`, kategorie mohou mít
+vlastní nahrané obrázky a u tlačítka lze vybrat umístění, vzhled i otevření v
+nové kartě. Vše se ukládá stejným hlavním tlačítkem jako ostatní změny.
+
 ## První napojení na Cloudflare
 
 V Cloudflare otevři **Workers & Pages**, zvol **Create application** a

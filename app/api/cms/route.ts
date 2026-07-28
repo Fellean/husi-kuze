@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { isAdminRequest } from "../../selfhost-auth";
+import { isCmsContent } from "../../cms-content";
 
 type PatchKind = "text" | "href" | "src" | "alt";
 
@@ -43,19 +44,24 @@ function validPatch(value: unknown): value is CmsPatch {
 }
 
 export async function GET(request: Request) {
-  const locale = new URL(request.url).searchParams.get("locale") ?? "cs";
+  const url = new URL(request.url);
+  const locale = url.searchParams.get("locale") ?? "cs";
   if (!allowedLocales.has(locale)) {
     return Response.json({ error: "Unsupported locale." }, { status: 400 });
   }
 
   try {
     const response = await storage().fetch(
-      `https://cms.internal/patches?locale=${encodeURIComponent(locale)}`,
+      `https://cms.internal/${
+        url.searchParams.get("content") === "1" ? "content" : "patches"
+      }?locale=${encodeURIComponent(locale)}`,
     );
     return mutableResponse(response);
   } catch {
     return Response.json(
-      { patches: [] },
+      url.searchParams.get("content") === "1"
+        ? { content: { categories: [], articles: [], buttons: [] } }
+        : { patches: [] },
       { headers: { "cache-control": "no-store" } },
     );
   }
@@ -66,7 +72,11 @@ export async function PUT(request: Request) {
     return Response.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  let payload: { locale?: string; patches?: unknown[] };
+  let payload: {
+    locale?: string;
+    patches?: unknown[];
+    content?: unknown;
+  };
   try {
     payload = (await request.json()) as typeof payload;
   } catch {
@@ -74,10 +84,26 @@ export async function PUT(request: Request) {
   }
 
   const locale = payload.locale ?? "";
-  const patches = payload.patches ?? [];
   if (!allowedLocales.has(locale)) {
     return Response.json({ error: "Unsupported locale." }, { status: 400 });
   }
+
+  if (payload.content !== undefined) {
+    if (!isCmsContent(payload.content)) {
+      return Response.json({ error: "Invalid content." }, { status: 400 });
+    }
+    const response = await storage().fetch(
+      `https://cms.internal/content?locale=${encodeURIComponent(locale)}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content: payload.content }),
+      },
+    );
+    return mutableResponse(response);
+  }
+
+  const patches = payload.patches ?? [];
   if (
     !Array.isArray(patches) ||
     patches.length > 1_000 ||
